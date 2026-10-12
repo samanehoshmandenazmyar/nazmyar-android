@@ -1,0 +1,6 @@
+{
+  "name": "سامانه هوشمند نظمیار",
+  "description": "سامانه هوشمند مدیریت رفتار، تشویق‌ها و موارد انضباطی مدارس (نظمیار)",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
