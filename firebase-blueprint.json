@@ -1,0 +1,28 @@
+{
+  "entities": {
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "Represents a message sent in a class group messenger.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique message identifier" },
+        "classGroupId": { "type": "string", "description": "ID of the class group" },
+        "senderId": { "type": "string", "description": "ID of the user who sent the message" },
+        "senderName": { "type": "string", "description": "Name of the sender" },
+        "senderRole": { "type": "string", "description": "Role of the sender (e.g. دانش‌آموز, دبیر)" },
+        "text": { "type": "string", "description": "Message text content" },
+        "timestamp": { "type": "integer", "description": "Timestamp in milliseconds" },
+        "timeFormatted": { "type": "string", "description": "Formatted time string (e.g. 10:30)" },
+        "isAttendanceCard": { "type": "boolean", "description": "Whether message is an attendance roll-call card" },
+        "attendanceData": { "type": "object", "description": "Attendance data card details" }
+      },
+      "required": ["id", "classGroupId", "senderId", "senderName", "text"]
+    }
+  },
+  "firestore": {
+    "/class_groups/{groupId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/ChatMessage" },
+      "description": "Collection of messages belonging to a class group"
+    }
+  }
+}

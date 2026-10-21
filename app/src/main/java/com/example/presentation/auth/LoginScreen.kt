@@ -296,7 +296,7 @@ fun LoginScreen(
                             FilterChip(
                                 selected = loginRole == UserRole.STUDENT,
                                 onClick = { loginRole = UserRole.STUDENT },
-                                label = { Text("👨‍🎓 دانش‌آموز") },
+                                label = { Text("دانش‌آموز") },
                                 colors = FilterChipDefaults.filterChipColors(
                                     selectedContainerColor = SchoolBluePrimary.copy(alpha = 0.15f),
                                     selectedLabelColor = SchoolBluePrimary
@@ -309,7 +309,7 @@ fun LoginScreen(
                             FilterChip(
                                 selected = loginRole == UserRole.PARENT,
                                 onClick = { loginRole = UserRole.PARENT },
-                                label = { Text("👨‍👩‍👦 ولی دانش‌آموز") },
+                                label = { Text("ولی دانش‌آموز") },
                                 colors = FilterChipDefaults.filterChipColors(
                                     selectedContainerColor = SchoolBluePrimary.copy(alpha = 0.15f),
                                     selectedLabelColor = SchoolBluePrimary
@@ -336,7 +336,7 @@ fun LoginScreen(
                                 FilterChip(
                                     selected = loginParentRelation == "پدر دانش‌آموز",
                                     onClick = { loginParentRelation = "پدر دانش‌آموز" },
-                                    label = { Text("👨 پدر دانش‌آموز") },
+                                    label = { Text("پدر دانش‌آموز") },
                                     colors = FilterChipDefaults.filterChipColors(
                                         selectedContainerColor = SchoolBluePrimary.copy(alpha = 0.15f),
                                         selectedLabelColor = SchoolBluePrimary
@@ -348,7 +348,7 @@ fun LoginScreen(
                                 FilterChip(
                                     selected = loginParentRelation == "مادر دانش‌آموز",
                                     onClick = { loginParentRelation = "مادر دانش‌آموز" },
-                                    label = { Text("👩 مادر دانش‌آموز") },
+                                    label = { Text("مادر دانش‌آموز") },
                                     colors = FilterChipDefaults.filterChipColors(
                                         selectedContainerColor = SchoolBluePrimary.copy(alpha = 0.15f),
                                         selectedLabelColor = SchoolBluePrimary
@@ -366,7 +366,7 @@ fun LoginScreen(
                                 color = Color(0xFFF1F5F9)
                             ) {
                                 Text(
-                                    text = "📌 اولیای گرامی: جهت ورود، نیازی به ثبت‌نام جداگانه ندارید. کافیست نام و کد دانش‌آموزی فرزند خود و رمز عبور او را وارد فرمایید.",
+                                    text = "اولیای گرامی: جهت ورود، نیازی به ثبت‌نام جداگانه ندارید. کافیست نام و کد دانش‌آموزی فرزند خود و رمز عبور او را وارد فرمایید.",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = Color(0xFF475569),
                                     modifier = Modifier.padding(12.dp)
@@ -764,7 +764,7 @@ fun LoginScreen(
                             },
                             placeholder = {
                                 Text(
-                                    text = "برای تولید کد روی فلش دایره‌ای 🔄 بزنید",
+                                    text = "برای تولید کد دکمه بازتولید را لمس کنید",
                                     style = MaterialTheme.typography.bodyMedium.copy(
                                         fontFamily = VazirmatnFontFamily,
                                         fontWeight = FontWeight.Light
@@ -781,7 +781,7 @@ fun LoginScreen(
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Refresh,
-                                        contentDescription = "تولید مجدد کد تصادفی با فلش دایره‌ای",
+                                        contentDescription = "تولید مجدد کد تصادفی",
                                         tint = SchoolBluePrimary
                                     )
                                 }
@@ -789,9 +789,9 @@ fun LoginScreen(
                             supportingText = {
                                 Text(
                                     text = if (regStudentCode.isNotEmpty())
-                                        "کد اختصاصی: $regStudentCode (برای تغییر، روی فلش دایره‌ای 🔄 بزنید)"
+                                        "کد اختصاصی: $regStudentCode (برای تغییر، دکمه بازتولید را لمس کنید)"
                                     else
-                                        "برای تولید کد ۶ رقمی، روی فلش دایره‌ای 🔄 لمس کنید",
+                                        "برای تولید کد ۶ رقمی، دکمه بازتولید را لمس کنید",
                                     style = MaterialTheme.typography.bodySmall.copy(
                                         fontFamily = VazirmatnFontFamily,
                                         fontWeight = FontWeight.Light

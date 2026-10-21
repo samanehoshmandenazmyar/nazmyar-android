@@ -40,7 +40,7 @@ class AuthFlowTest {
     fun testStudentRegistrationWithRandomCodeAndGrayRank() = runBlocking {
         val studentCode = "987654"
         val regResult = repo.register(
-            name = "علی محمدی",
+            name = "رضا ایمانخواه",
             studentCode = studentCode,
             phone = "09121112233",
             email = "ali@example.com",
@@ -58,7 +58,7 @@ class AuthFlowTest {
         assertFalse(student?.isReadOnly ?: true)
 
         // Login with registered student
-        val loginResult = repo.login("علی محمدی", studentCode, "pass1234")
+        val loginResult = repo.login("رضا ایمانخواه", studentCode, "pass1234")
         assertTrue(loginResult.isSuccess)
     }
 
@@ -86,17 +86,17 @@ class AuthFlowTest {
     fun testAccountRecoveryByEmailOrPhone() = runBlocking {
         val code = "555666"
         repo.register(
-            name = "مریم حسینی",
+            name = "حمید رضا دراهکی",
             studentCode = code,
             phone = "09129998877",
-            email = "maryam@gmail.com",
+            email = "hamid@gmail.com",
             password = "secretPassword",
             role = UserRole.STUDENT,
-            gender = "دختر"
+            gender = "پسر"
         )
 
         // Recover by email
-        val recoverResult1 = repo.recoverAccount("maryam@gmail.com")
+        val recoverResult1 = repo.recoverAccount("hamid@gmail.com")
         assertTrue(recoverResult1.isSuccess)
         assertEquals(code, recoverResult1.getOrNull()?.studentCode)
         assertEquals("secretPassword", recoverResult1.getOrNull()?.password)
@@ -117,7 +117,7 @@ class AuthFlowTest {
     fun testParentLoginUsingChildCredentialsForFatherAndMother() = runBlocking {
         val studentCode = "778899"
         val regResult = repo.register(
-            name = "امیرحسین رضایی",
+            name = "آریا دوراهکی",
             studentCode = studentCode,
             phone = "09123334455",
             email = "amir@example.com",
@@ -129,7 +129,7 @@ class AuthFlowTest {
 
         // Login as Father using child's name, code and password
         val fatherLogin = repo.login(
-            name = "امیرحسین رضایی",
+            name = "آریا دوراهکی",
             studentCode = studentCode,
             password = "childPassword123",
             role = UserRole.PARENT,
@@ -138,14 +138,14 @@ class AuthFlowTest {
         assertTrue(fatherLogin.isSuccess)
         val fatherUser = fatherLogin.getOrNull()
         assertNotNull(fatherUser)
-        assertEquals("امیرحسین رضایی", fatherUser?.name)
+        assertEquals("آریا دوراهکی", fatherUser?.name)
         assertEquals(UserRole.PARENT, fatherUser?.role)
         assertEquals("پدر دانش‌آموز", fatherUser?.rankTitle)
         assertTrue(fatherUser?.isReadOnly == true)
 
         // Login as Mother using child's credentials
         val motherLogin = repo.login(
-            name = "امیرحسین رضایی",
+            name = "آریا دوراهکی",
             studentCode = studentCode,
             password = "childPassword123",
             role = UserRole.PARENT,
@@ -154,7 +154,7 @@ class AuthFlowTest {
         assertTrue(motherLogin.isSuccess)
         val motherUser = motherLogin.getOrNull()
         assertNotNull(motherUser)
-        assertEquals("امیرحسین رضایی", motherUser?.name)
+        assertEquals("آریا دوراهکی", motherUser?.name)
         assertEquals(UserRole.PARENT, motherUser?.role)
         assertEquals("مادر دانش‌آموز", motherUser?.rankTitle)
         assertTrue(motherUser?.isReadOnly == true)

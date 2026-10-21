@@ -1,12 +1,12 @@
-# 🏫 سامانه هوشمند نظم‌یار (NazmYar)
+# 🏫 سامانه هوشمند نظم‌یار (NezamYar)
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/Version-1.0.6-blue.svg?style=for-the-badge)
-![Platform](https://img.shields.io/badge/Platform-Android-green.svg?style=for-the-badge&logo=android)
-![Kotlin](https://img.shields.io/badge/Kotlin-2.0+-purple.svg?style=for-the-badge&logo=kotlin)
-![Jetpack Compose](https://img.shields.io/badge/Design-Jetpack%20Compose%20(M3)-4285F4.svg?style=for-the-badge&logo=jetpackcompose)
-![Firebase](https://img.shields.io/badge/Backend-Firebase%20Realtime-FFCA28.svg?style=for-the-badge&logo=firebase)
+![Version](https://img.shields.io/badge/نسخه-1.0.6-blue.svg?style=for-the-badge)
+![Platform](https://img.shields.io/badge/پلتفرم-Android-green.svg?style=for-the-badge&logo=android)
+![Kotlin](https://img.shields.io/badge/کاتلین-2.0+-purple.svg?style=for-the-badge&logo=kotlin)
+![Jetpack Compose](https://img.shields.io/badge/طراحی-Jetpack%20Compose%20(M3)-4285F4.svg?style=for-the-badge&logo=jetpackcompose)
+![Firebase](https://img.shields.io/badge/سرور-Firebase%20Realtime-FFCA28.svg?style=for-the-badge&logo=firebase)
 
 **سامانه جامع و هوشمند مدیریت رفتار، امتیازات، موارد انضباطی، رنک‌ها و سطوح دسترسی مدارس**
 
@@ -18,7 +18,7 @@
 
 ## 📖 معرفی پروژه
 
-**نظم‌یار (NazmYar)** یک اپلیکیشن مدرن اندرویدی است که با هدف هوشمندسازی فرآیندهای انضباطی، انگیزشی و رتبه‌بندی دانش‌آموزان در مدارس و دبیرستان‌ها توسعه یافته است. این سامانه ارتباط مستمر، شفاف و لحظه‌ای بین **کادر مدیریت مدرسه، معاونین، دبیران، دانش‌آموزان و اولیا** را بر بستر ابری امن فراهم می‌سازد.
+**نظم‌یار (NezamYar)** یک اپلیکیشن مدرن اندرویدی است که با هدف هوشمندسازی فرآیندهای انضباطی، انگیزشی و رتبه‌بندی دانش‌آموزان در مدارس و دبیرستان‌ها توسعه یافته است. این سامانه ارتباط مستمر، شفاف و لحظه‌ای بین **کادر مدیریت مدرسه، معاونین، دبیران، دانش‌آموزان و اولیا** را بر بستر ابری امن فراهم می‌سازد.
 
 ---
 

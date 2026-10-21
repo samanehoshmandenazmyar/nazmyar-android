@@ -10,7 +10,7 @@ data class AllowedStudentEntry(
 
 object AllowedStudentsRegistry {
 
-    private fun normalize(text: String): String {
+    fun normalize(text: String): String {
         return text
             .replace('ي', 'ی')
             .replace('ك', 'ک')

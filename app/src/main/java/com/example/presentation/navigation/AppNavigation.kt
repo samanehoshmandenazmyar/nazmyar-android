@@ -101,6 +101,26 @@ import com.example.presentation.students.StudentProfileScreen
 import com.example.presentation.students.StudentsListScreen
 import com.example.presentation.viewmodel.AuthViewModel
 import com.example.presentation.viewmodel.MainViewModel
+import androidx.compose.material.icons.filled.HowToVote
+import androidx.compose.material.icons.filled.Campaign
+import androidx.compose.material.icons.outlined.Campaign
+import androidx.compose.material.icons.filled.Assignment
+import androidx.compose.material.icons.outlined.Assignment
+import com.example.presentation.voting.PtaVotingScreen
+import com.example.presentation.banner.BannerManagementScreen
+import com.example.presentation.messenger.ClassMessengerListScreen
+import com.example.presentation.messenger.ClassChatScreen
+import com.example.presentation.behavior.StudentMonthlyDossierScreen
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.filled.Dashboard
+import androidx.compose.material.icons.filled.Forum
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import com.example.ui.theme.IncidentRed
 import com.example.ui.theme.PositiveGreen
 import com.example.ui.theme.SchoolBluePrimary
@@ -115,18 +135,32 @@ sealed class Screen(
 ) {
     data object Login : Screen("login", "ورود", Icons.Default.Person, Icons.Outlined.Person)
     data object Home : Screen("home", "خانه و داشبورد", Icons.Default.Home, Icons.Outlined.Home)
-    data object Students : Screen("students", "لیست مخاطب‌ها", Icons.Default.Group, Icons.Outlined.Group)
+    data object ClassMessenger : Screen("class_messenger", "پیام‌رسان کلاس‌ها", Icons.Default.Forum, Icons.Default.Forum)
+    data object ClassChat : Screen("class_chat/{groupId}", "گفتگوی کلاس", Icons.Default.Forum, Icons.Default.Forum) {
+        fun createRoute(groupId: String) = "class_chat/$groupId"
+    }
+    data object Students : Screen("students", "مخاطب‌ها", Icons.Default.Group, Icons.Outlined.Group)
+    data object PtaVoting : Screen("pta_voting", "انتخاب انجمن اولیا و مربیان", Icons.Default.HowToVote, Icons.Default.HowToVote)
+    data object BannerManagement : Screen("banner_management", "مدیریت بنرهای صفحه اول", Icons.Default.Campaign, Icons.Outlined.Campaign)
     data object Games : Screen("games", "بازی‌ها و شطرنج", Icons.Default.SportsEsports, Icons.Outlined.SportsEsports)
     data object ChessGame : Screen("chess_game", "بازی شطرنج", Icons.Default.SportsEsports, Icons.Outlined.SportsEsports)
     data object RegisterPositive : Screen("register_positive", "ثبت رفتار مثبت", Icons.Default.AddCircle, Icons.Default.AddCircle)
     data object RegisterDisciplinary : Screen("register_disciplinary", "ثبت گزارش انضباطی", Icons.Default.AddCircle, Icons.Default.AddCircle)
     data object Reports : Screen("reports", "گزارش‌ها و آمار", Icons.Default.Assessment, Icons.Outlined.Assessment)
-    data object Notifications : Screen("notifications", "اعلان‌ها و رویدادها", Icons.Default.Notifications, Icons.Outlined.Notifications)
-    data object Profile : Screen("profile", "پروفایل و تنظیمات", Icons.Default.Person, Icons.Outlined.Person)
-    data object RankManagement : Screen("rank_management", "مدیریت رنک‌ها و دسترسی‌ها", Icons.Default.Security, Icons.Outlined.Security)
-    data object PublishAppUpdate : Screen("publish_app_update", "آپلود و انتشار آپدیت برنامه", Icons.Default.CloudUpload, Icons.Default.CloudUpload)
+    data object Notifications : Screen("notifications", "اعلان‌ها", Icons.Default.Notifications, Icons.Outlined.Notifications)
+    data object Profile : Screen("profile", "پروفایل", Icons.Default.Person, Icons.Outlined.Person)
+    data object RankManagement : Screen("rank_management", "مدیریت رنک‌ها", Icons.Default.Security, Icons.Outlined.Security)
+    data object PublishAppUpdate : Screen("publish_app_update", "انتشار نسخه جدید", Icons.Default.CloudUpload, Icons.Default.CloudUpload)
     data object StudentProfile : Screen("student_profile/{studentId}", "پرونده دانش‌آموز", Icons.Default.Face, Icons.Outlined.Face) {
         fun createRoute(studentId: String) = "student_profile/$studentId"
+    }
+    data object StudentMonthlyDossier : Screen(
+        "student_monthly_dossier?studentId={studentId}",
+        "پرونده انضباطی ماهانه",
+        Icons.Default.Assignment,
+        Icons.Outlined.Assignment
+    ) {
+        fun createRoute(studentId: String = "") = if (studentId.isBlank()) "student_monthly_dossier" else "student_monthly_dossier?studentId=$studentId"
     }
 }
 
@@ -180,7 +214,7 @@ fun AppNavigation(
 
     val drawerItems = when (effectiveRole) {
         UserRole.STUDENT -> {
-            val items = mutableListOf<Screen>(Screen.Home)
+            val items = mutableListOf<Screen>(Screen.Home, Screen.PtaVoting)
             if (userPerms.contains(RankPermission.VIEW_STUDENT_PROFILES) || userPerms.contains(RankPermission.EDIT_CLASS_INFO)) {
                 items.add(Screen.Students)
             }
@@ -194,25 +228,30 @@ fun AppNavigation(
         }
         UserRole.PARENT -> listOf(
             Screen.Home,
+            Screen.PtaVoting,
             Screen.Games,
             Screen.Reports,
             Screen.Notifications,
             Screen.Profile
         )
         else -> {
-            if (currentUser?.isCreator == true) {
+            if (currentUser?.isCreator == true || currentUser?.role == UserRole.MANAGER || currentUser?.role == UserRole.VICE_PRINCIPAL) {
                 listOf(
                     Screen.Home,
+                    Screen.PtaVoting,
+                    Screen.BannerManagement,
                     Screen.Students,
+                    Screen.StudentMonthlyDossier,
                     Screen.Games,
                     Screen.Reports,
                     Screen.Notifications,
                     Screen.Profile
                 )
             } else {
-                val items = mutableListOf<Screen>(Screen.Home)
+                val items = mutableListOf<Screen>(Screen.Home, Screen.PtaVoting)
                 if (userPerms.contains(RankPermission.VIEW_STUDENT_PROFILES) || userPerms.contains(RankPermission.EDIT_CLASS_INFO)) {
                     items.add(Screen.Students)
+                    items.add(Screen.StudentMonthlyDossier)
                 }
                 if (userPerms.contains(RankPermission.ACCESS_GAMES)) {
                     items.add(Screen.Games)
@@ -238,6 +277,8 @@ fun AppNavigation(
                     .testTag("modal_drawer_sheet"),
                 drawerContainerColor = MaterialTheme.colorScheme.surface
             ) {
+                var isDashboardExpanded by remember { mutableStateOf(true) }
+
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
@@ -339,32 +380,252 @@ fun AppNavigation(
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp)
                     )
 
-                    // Main Drawer Navigation Items (transferred from bottom bar)
-                    drawerItems.forEach { screen ->
-                        val isSelected = currentRoute == screen.route
+                    // والد آکاردئونی «داشبورد» با قابلیت باز و بسته شدن (فلش آکاردئونی)
+                    val isDashboardActive = currentRoute == Screen.Home.route || currentRoute == Screen.ClassMessenger.route || currentRoute?.startsWith("class_chat") == true
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = if (isDashboardActive) SchoolBluePrimary.copy(alpha = 0.08f) else Color.Transparent,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 2.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .clickable { isDashboardExpanded = !isDashboardExpanded }
+                            .testTag("drawer_dashboard_accordion_parent")
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Dashboard,
+                                    contentDescription = null,
+                                    tint = if (isDashboardActive) SchoolBluePrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = "داشبورد",
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        fontFamily = VazirmatnFontFamily,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isDashboardActive) SchoolBluePrimary else MaterialTheme.colorScheme.onSurface
+                                    )
+                                )
+                            }
+
+                            // فلش آکاردئونی باز و بسته شدن
+                            Icon(
+                                imageVector = if (isDashboardExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                contentDescription = if (isDashboardExpanded) "بستن زیرمنو" else "باز کردن زیرمنو",
+                                tint = if (isDashboardActive) SchoolBluePrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                    }
+
+                    // زیرمجموعه داشبورد: پیام‌رسان کلاس‌ها و صفحه اصلی خانه
+                    AnimatedVisibility(
+                        visible = isDashboardExpanded,
+                        enter = expandVertically() + fadeIn(),
+                        exit = shrinkVertically() + fadeOut()
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 16.dp, end = 8.dp)
+                        ) {
+                            // زیرمنوی ۱: پیام‌رسان کلاس‌ها (زیرمجموعه داشبورد)
+                            val isMessengerSelected = currentRoute == Screen.ClassMessenger.route || currentRoute?.startsWith("class_chat") == true
+                            NavigationDrawerItem(
+                                selected = isMessengerSelected,
+                                onClick = {
+                                    closeDrawer()
+                                    if (currentRoute != Screen.ClassMessenger.route) {
+                                        navController.navigate(Screen.ClassMessenger.route) {
+                                            popUpTo(Screen.Home.route) { inclusive = false }
+                                            launchSingleTop = true
+                                        }
+                                    }
+                                },
+                                icon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Forum,
+                                        contentDescription = "پیام‌رسان کلاس‌ها",
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                },
+                                label = {
+                                    Text(
+                                        text = "پیام‌رسان کلاس‌ها",
+                                        style = MaterialTheme.typography.bodySmall.copy(
+                                            fontFamily = VazirmatnFontFamily,
+                                            fontWeight = if (isMessengerSelected) FontWeight.Bold else FontWeight.Medium
+                                        )
+                                    )
+                                },
+                                badge = {
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = Color(0xFF2AABEE).copy(alpha = 0.15f)
+                                    ) {
+                                        Text(
+                                            text = "۶ گروه",
+                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                fontFamily = VazirmatnFontFamily,
+                                                color = Color(0xFF0288D1),
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 10.sp
+                                            ),
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                },
+                                colors = NavigationDrawerItemDefaults.colors(
+                                    selectedContainerColor = SchoolBluePrimary.copy(alpha = 0.12f),
+                                    selectedIconColor = SchoolBluePrimary,
+                                    selectedTextColor = SchoolBluePrimary
+                                ),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier
+                                    .padding(vertical = 2.dp)
+                                    .testTag("drawer_subitem_class_messenger")
+                            )
+
+                            // زیرمنوی ۲: خانه و داشبورد اصلی
+                            val isHomeSelected = currentRoute == Screen.Home.route
+                            NavigationDrawerItem(
+                                selected = isHomeSelected,
+                                onClick = {
+                                    closeDrawer()
+                                    if (currentRoute != Screen.Home.route) {
+                                        val popped = navController.popBackStack(Screen.Home.route, false)
+                                        if (!popped) {
+                                            navController.navigate(Screen.Home.route) {
+                                                popUpTo(navController.graph.findStartDestination().id) { inclusive = false }
+                                                launchSingleTop = true
+                                            }
+                                        }
+                                    }
+                                },
+                                icon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Home,
+                                        contentDescription = "صفحه خانه",
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                },
+                                label = {
+                                    Text(
+                                        text = "خانه و آمار مدرسه",
+                                        style = MaterialTheme.typography.bodySmall.copy(
+                                            fontFamily = VazirmatnFontFamily,
+                                            fontWeight = if (isHomeSelected) FontWeight.Bold else FontWeight.Normal
+                                        )
+                                    )
+                                },
+                                colors = NavigationDrawerItemDefaults.colors(
+                                    selectedContainerColor = SchoolBluePrimary.copy(alpha = 0.12f),
+                                    selectedIconColor = SchoolBluePrimary,
+                                    selectedTextColor = SchoolBluePrimary
+                                ),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier
+                                    .padding(vertical = 2.dp)
+                                    .testTag("drawer_subitem_home")
+                            )
+
+                            // زیرمنوی ۳: پرونده‌های انضباطی ماهانه (محرمانه)
+                            val canAccessDossier = currentUser?.isCreator == true ||
+                                currentUser?.role == UserRole.MANAGER ||
+                                currentUser?.role == UserRole.VICE_PRINCIPAL ||
+                                currentUser?.role == UserRole.TEACHER ||
+                                userPerms.contains(RankPermission.VIEW_STUDENT_PROFILES)
+
+                            if (canAccessDossier) {
+                                val isDossierSelected = currentRoute?.startsWith("student_monthly_dossier") == true
+                                NavigationDrawerItem(
+                                    selected = isDossierSelected,
+                                    onClick = {
+                                        closeDrawer()
+                                        if (currentRoute?.startsWith("student_monthly_dossier") != true) {
+                                            navController.navigate("student_monthly_dossier") {
+                                                popUpTo(Screen.Home.route) { inclusive = false }
+                                                launchSingleTop = true
+                                            }
+                                        }
+                                    },
+                                    icon = {
+                                        Icon(
+                                            imageVector = Icons.Default.Assignment,
+                                            contentDescription = "پرونده انضباطی ماهانه",
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    },
+                                    label = {
+                                        Text(
+                                            text = "پرونده انضباطی ماهانه",
+                                            style = MaterialTheme.typography.bodySmall.copy(
+                                                fontFamily = VazirmatnFontFamily,
+                                                fontWeight = if (isDossierSelected) FontWeight.Bold else FontWeight.Normal
+                                            )
+                                        )
+                                    },
+                                    badge = {
+                                        Surface(
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = IncidentRed.copy(alpha = 0.12f)
+                                        ) {
+                                            Text(
+                                                text = "محرمانه",
+                                                style = MaterialTheme.typography.labelSmall.copy(
+                                                    fontFamily = VazirmatnFontFamily,
+                                                    color = IncidentRed,
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 10.sp
+                                                ),
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    },
+                                    colors = NavigationDrawerItemDefaults.colors(
+                                        selectedContainerColor = SchoolBluePrimary.copy(alpha = 0.12f),
+                                        selectedIconColor = SchoolBluePrimary,
+                                        selectedTextColor = SchoolBluePrimary
+                                    ),
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier
+                                        .padding(vertical = 2.dp)
+                                        .testTag("drawer_subitem_monthly_dossier")
+                                )
+                            }
+                        }
+                    }
+
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+                    )
+
+                    // سایر آیتم‌های منوی کشویی
+                    drawerItems.filter { it != Screen.Home }.forEach { screen ->
+                        val targetRoute = if (screen == Screen.StudentMonthlyDossier) Screen.StudentMonthlyDossier.createRoute() else screen.route
+                        val isSelected = currentRoute == screen.route || (screen == Screen.StudentMonthlyDossier && currentRoute?.startsWith("student_monthly_dossier") == true)
                         NavigationDrawerItem(
                             selected = isSelected,
                             onClick = {
                                 closeDrawer()
-                                if (currentRoute != screen.route) {
-                                    if (screen.route == Screen.Home.route) {
-                                        val popped = navController.popBackStack(Screen.Home.route, false)
-                                        if (!popped) {
-                                            navController.navigate(Screen.Home.route) {
-                                                popUpTo(navController.graph.findStartDestination().id) {
-                                                    inclusive = false
-                                                }
-                                                launchSingleTop = true
-                                            }
+                                if (currentRoute != targetRoute && !(screen == Screen.StudentMonthlyDossier && currentRoute?.startsWith("student_monthly_dossier") == true)) {
+                                    navController.navigate(targetRoute) {
+                                        popUpTo(Screen.Home.route) {
+                                            saveState = false
+                                            inclusive = false
                                         }
-                                    } else {
-                                        navController.navigate(screen.route) {
-                                            popUpTo(Screen.Home.route) {
-                                                saveState = false
-                                                inclusive = false
-                                            }
-                                            launchSingleTop = true
-                                        }
+                                        launchSingleTop = true
                                     }
                                 }
                             },
@@ -531,21 +792,14 @@ fun AppNavigation(
                                 )
                             },
                             label = {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text(
-                                        text = "مدیریت رنک‌ها و دسترسی‌ها",
-                                        style = MaterialTheme.typography.bodyMedium.copy(
-                                            fontFamily = VazirmatnFontFamily,
-                                            fontWeight = if (isRankSelected) FontWeight.Bold else FontWeight.Light
-                                        ),
-                                        color = if (isRankSelected) Color(0xFF6D28D9) else MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    RgbRankBadge(text = "ویژه", isSmall = true)
-                                }
+                                Text(
+                                    text = "مدیریت رنک‌ها",
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        fontFamily = VazirmatnFontFamily,
+                                        fontWeight = if (isRankSelected) FontWeight.Bold else FontWeight.Light
+                                    ),
+                                    color = if (isRankSelected) Color(0xFF6D28D9) else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             },
                             colors = NavigationDrawerItemDefaults.colors(
                                 selectedContainerColor = Color(0xFF7C3AED).copy(alpha = 0.12f),
@@ -571,27 +825,20 @@ fun AppNavigation(
                             icon = {
                                 Icon(
                                     imageVector = Icons.Default.CloudUpload,
-                                    contentDescription = "آپلود و انتشار آپدیت برنامه",
+                                    contentDescription = "انتشار نسخه جدید",
                                     tint = SchoolBluePrimary,
                                     modifier = Modifier.size(22.dp)
                                 )
                             },
                             label = {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text(
-                                        text = "آپلود و انتشار نسخه جدید",
-                                        style = MaterialTheme.typography.bodyMedium.copy(
-                                            fontFamily = VazirmatnFontFamily,
-                                            fontWeight = if (isUpdateSelected) FontWeight.Bold else FontWeight.Light
-                                        ),
-                                        color = if (isUpdateSelected) SchoolBluePrimary else MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    RgbRankBadge(text = "سازنده", isSmall = true)
-                                }
+                                Text(
+                                    text = "انتشار نسخه جدید",
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        fontFamily = VazirmatnFontFamily,
+                                        fontWeight = if (isUpdateSelected) FontWeight.Bold else FontWeight.Light
+                                    ),
+                                    color = if (isUpdateSelected) SchoolBluePrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             },
                             colors = NavigationDrawerItemDefaults.colors(
                                 selectedContainerColor = SchoolBluePrimary.copy(alpha = 0.12f),
@@ -692,12 +939,14 @@ fun AppNavigation(
                             onNavigateToDisciplinary = { navController.navigate(Screen.RegisterDisciplinary.route) },
                             onNavigateToReports = { navController.navigate(Screen.Reports.route) },
                             onNavigateToStudents = { navController.navigate(Screen.Students.route) },
+                            onNavigateToPtaVoting = { navController.navigate(Screen.PtaVoting.route) },
                             onMenuClick = openDrawer
                         )
                         UserRole.PARENT -> ParentDashboardScreen(
                             user = currentUser,
                             mainViewModel = mainViewModel,
                             onNavigateToNotifications = { navController.navigate(Screen.Notifications.route) },
+                            onNavigateToPtaVoting = { navController.navigate(Screen.PtaVoting.route) },
                             onMenuClick = openDrawer
                         )
                         UserRole.TEACHER -> TeacherDashboardScreen(
@@ -707,6 +956,7 @@ fun AppNavigation(
                             onNavigateToDisciplinary = { navController.navigate(Screen.RegisterDisciplinary.route) },
                             onNavigateToStudents = { navController.navigate(Screen.Students.route) },
                             onNavigateToNotifications = { navController.navigate(Screen.Notifications.route) },
+                            onNavigateToPtaVoting = { navController.navigate(Screen.PtaVoting.route) },
                             onMenuClick = openDrawer
                         )
                         else -> ManagerDashboardScreen(
@@ -719,6 +969,8 @@ fun AppNavigation(
                             onNavigateToNotifications = { navController.navigate(Screen.Notifications.route) },
                             onNavigateToRanks = { navController.navigate(Screen.RankManagement.route) },
                             onNavigateToPublishUpdate = { navController.navigate(Screen.PublishAppUpdate.route) },
+                            onNavigateToPtaVoting = { navController.navigate(Screen.PtaVoting.route) },
+                            onNavigateToBannerManagement = { navController.navigate(Screen.BannerManagement.route) },
                             onMenuClick = openDrawer
                         )
                     }
@@ -776,6 +1028,45 @@ fun AppNavigation(
                         onRegisterDisciplinary = { sId ->
                             mainViewModel.discStudentId.value = sId
                             navController.navigate(Screen.RegisterDisciplinary.route)
+                        },
+                        onNavigateToDossier = { sId ->
+                            navController.navigate(Screen.StudentMonthlyDossier.createRoute(sId))
+                        }
+                    )
+                }
+
+                composable(
+                    route = Screen.StudentMonthlyDossier.route,
+                    arguments = listOf(
+                        navArgument("studentId") {
+                            type = NavType.StringType
+                            defaultValue = ""
+                            nullable = true
+                        }
+                    )
+                ) { backStackEntry ->
+                    val studentId = backStackEntry.arguments?.getString("studentId")?.ifBlank { null }
+                    BackHandler {
+                        val popped = navController.popBackStack()
+                        if (!popped) {
+                            navController.navigate(Screen.Home.route) {
+                                popUpTo(navController.graph.findStartDestination().id) { inclusive = false }
+                                launchSingleTop = true
+                            }
+                        }
+                    }
+                    StudentMonthlyDossierScreen(
+                        initialStudentId = studentId,
+                        mainViewModel = mainViewModel,
+                        authViewModel = authViewModel,
+                        onBackClick = {
+                            val popped = navController.popBackStack()
+                            if (!popped) {
+                                navController.navigate(Screen.Home.route) {
+                                    popUpTo(navController.graph.findStartDestination().id) { inclusive = false }
+                                    launchSingleTop = true
+                                }
+                            }
                         }
                     )
                 }
@@ -845,6 +1136,55 @@ fun AppNavigation(
                     BackHandler { navController.popBackStack() }
                     PublishAppUpdateScreen(
                         authViewModel = authViewModel,
+                        onBackClick = { navController.popBackStack() }
+                    )
+                }
+
+                composable(Screen.PtaVoting.route) {
+                    BackHandler { navController.popBackStack() }
+                    PtaVotingScreen(
+                        currentUser = currentUser,
+                        onBackClick = { navController.popBackStack() }
+                    )
+                }
+
+                composable(Screen.BannerManagement.route) {
+                    BackHandler { navController.popBackStack() }
+                    BannerManagementScreen(
+                        user = currentUser,
+                        onBackClick = { navController.popBackStack() }
+                    )
+                }
+
+                composable(Screen.ClassMessenger.route) {
+                    BackHandler {
+                        val popped = navController.popBackStack(Screen.Home.route, false)
+                        if (!popped) {
+                            navController.navigate(Screen.Home.route) {
+                                popUpTo(navController.graph.findStartDestination().id) { inclusive = false }
+                                launchSingleTop = true
+                            }
+                        }
+                    }
+                    ClassMessengerListScreen(
+                        currentUser = currentUser,
+                        onNavigateToChat = { groupId ->
+                            navController.navigate(Screen.ClassChat.createRoute(groupId))
+                        },
+                        onMenuClick = openDrawer
+                    )
+                }
+
+                composable(
+                    route = Screen.ClassChat.route,
+                    arguments = listOf(navArgument("groupId") { type = NavType.StringType })
+                ) { backStackEntry ->
+                    val groupId = backStackEntry.arguments?.getString("groupId").orEmpty()
+                    BackHandler { navController.popBackStack() }
+                    ClassChatScreen(
+                        classGroupId = groupId,
+                        currentUser = currentUser,
+                        mainViewModel = mainViewModel,
                         onBackClick = { navController.popBackStack() }
                     )
                 }

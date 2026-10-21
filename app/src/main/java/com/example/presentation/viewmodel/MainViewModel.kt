@@ -19,6 +19,7 @@ import com.example.domain.repository.BehaviorRepository
 import com.example.domain.repository.ClassRepository
 import com.example.domain.repository.NotificationRepository
 import com.example.domain.repository.StudentRepository
+import com.example.domain.model.matchesQuery
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -55,6 +56,9 @@ class MainViewModel(
     val selectedGrade = MutableStateFlow("همه")
     val selectedClass = MutableStateFlow("همه")
 
+    val allStudents: StateFlow<List<Student>> = studentRepository.getStudents()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
     val students: StateFlow<List<Student>> = combine(
         studentRepository.getStudents(),
         searchQuery,
@@ -62,10 +66,7 @@ class MainViewModel(
         selectedClass
     ) { allStudents, query, grade, cls ->
         allStudents.filter { s ->
-            val matchQuery = query.isBlank() ||
-                s.fullName.contains(query, ignoreCase = true) ||
-                s.studentCode.contains(query) ||
-                s.className.contains(query, ignoreCase = true)
+            val matchQuery = s.matchesQuery(query)
             val matchGrade = matchesGradeAndClassFilter(s, grade)
             val matchClass = cls == "همه" || cls == "همه کلاس‌ها" || s.className == cls
             matchQuery && matchGrade && matchClass
@@ -159,7 +160,8 @@ class MainViewModel(
         creatorRole: UserRole,
         onSuccess: () -> Unit
     ) {
-        val student = students.value.firstOrNull { it.id == posStudentId.value }
+        val student = allStudents.value.firstOrNull { it.id == posStudentId.value }
+            ?: students.value.firstOrNull { it.id == posStudentId.value }
         if (student == null) {
             operationState.value = OperationState.Error("لطفاً دانش‌آموز مورد نظر را انتخاب نمایید.")
             return
@@ -182,8 +184,8 @@ class MainViewModel(
                 category = posCategory.value,
                 title = posTitle.value.trim(),
                 description = posDescription.value.trim(),
-                date = "۱۴۰۳/۰۷/۱۶",
-                time = "۱۱:۴۵",
+                date = com.example.core.utils.DateTimeUtils.getCurrentPersianDate(),
+                time = com.example.core.utils.DateTimeUtils.getCurrentTime(),
                 points = posPoints.value,
                 createdBy = creatorName,
                 createdByRole = creatorRole,
@@ -204,7 +206,8 @@ class MainViewModel(
         creatorRole: UserRole,
         onSuccess: () -> Unit
     ) {
-        val student = students.value.firstOrNull { it.id == discStudentId.value }
+        val student = allStudents.value.firstOrNull { it.id == discStudentId.value }
+            ?: students.value.firstOrNull { it.id == discStudentId.value }
         if (student == null) {
             operationState.value = OperationState.Error("لطفاً دانش‌آموز مورد نظر را انتخاب نمایید.")
             return
@@ -228,8 +231,8 @@ class MainViewModel(
                 category = discCategory.value,
                 title = discTitle.value.trim(),
                 description = discDescription.value.trim(),
-                date = "۱۴۰۳/۰۷/۱۶",
-                time = "۱۲:۱۵",
+                date = com.example.core.utils.DateTimeUtils.getCurrentPersianDate(),
+                time = com.example.core.utils.DateTimeUtils.getCurrentTime(),
                 location = discLocation.value.trim(),
                 severity = discSeverity.value,
                 points = discPoints.value,
@@ -245,6 +248,49 @@ class MainViewModel(
             discTitle.value = ""
             discDescription.value = ""
             onSuccess()
+        }
+    }
+
+    fun registerBehaviorRecord(
+        studentId: String,
+        type: RecordType,
+        category: String,
+        title: String,
+        description: String,
+        date: String = com.example.core.utils.DateTimeUtils.getCurrentPersianDate(),
+        time: String = com.example.core.utils.DateTimeUtils.getCurrentTime(),
+        location: String = "آموزشگاه",
+        severity: SeverityLevel = SeverityLevel.MEDIUM,
+        points: Int = if (type.isPositive) 2 else 1,
+        createdBy: String = "معاونت مدرسه",
+        createdByRole: UserRole = UserRole.VICE_PRINCIPAL,
+        parentNotified: Boolean = true
+    ) {
+        val student = allStudents.value.firstOrNull { it.id == studentId } 
+            ?: students.value.firstOrNull { it.id == studentId } 
+            ?: return
+        viewModelScope.launch {
+            val record = BehaviorRecord(
+                id = "rec_${UUID.randomUUID()}",
+                studentId = student.id,
+                studentName = student.fullName,
+                studentGrade = student.grade,
+                studentClass = student.className,
+                schoolId = student.schoolId,
+                type = type,
+                category = category,
+                title = title.trim(),
+                description = description.trim(),
+                date = date,
+                time = time,
+                location = location,
+                severity = severity,
+                points = points,
+                createdBy = createdBy,
+                createdByRole = createdByRole,
+                parentNotified = parentNotified
+            )
+            behaviorRepository.addRecord(record)
         }
     }
 
@@ -275,6 +321,16 @@ class MainViewModel(
             return
         }
 
+        val candidateFullName = "$cleanF $cleanL".trim()
+        val candidateNorm = com.example.data.demo.AllowedStudentsRegistry.normalize(candidateFullName)
+        val duplicate = allStudents.value.any { s ->
+            s.isRegistered && com.example.data.demo.AllowedStudentsRegistry.normalize(s.fullName) == candidateNorm
+        }
+        if (duplicate) {
+            operationState.value = OperationState.Error("دانش‌آموزی با نام «$candidateFullName» قبلاً در سامانه ثبت شده است. داشتن دو حساب با یک نام مجاز نیست.")
+            return
+        }
+
         viewModelScope.launch {
             val student = Student(
                 id = "std_${UUID.randomUUID().toString().take(8)}",
@@ -292,7 +348,8 @@ class MainViewModel(
                 role = UserRole.STUDENT,
                 rankTitle = "دانش‌آموز",
                 rankColorHex = "#64748B",
-                permissions = emptyList()
+                permissions = emptyList(),
+                isRegistered = true
             )
             studentRepository.addStudent(student)
             operationState.value = OperationState.Success("${student.fullName} با موفقیت در سامانه ثبت شد و امکان ورود دارد.")

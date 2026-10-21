@@ -91,6 +91,8 @@ import com.example.ui.theme.PositiveGreen
 import com.example.ui.theme.SchoolBlueContainer
 import com.example.ui.theme.SchoolBluePrimary
 import com.example.ui.theme.VazirmatnFontFamily
+import com.example.core.update.ApkDownloader
+import com.example.core.update.InAppUpdateManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -113,20 +115,26 @@ fun PublishAppUpdateScreen(
     val currentUpdateInfo by authViewModel.appUpdateInfo.collectAsState()
 
     // Form states
-    var versionName by remember { mutableStateOf("1.0.6") }
-    var versionCode by remember { mutableIntStateOf(7) }
+    var versionName by remember { mutableStateOf("1.0.7") }
+    var versionCode by remember { mutableIntStateOf(8) }
+    var minSupportedVersionCode by remember { mutableIntStateOf(1) }
+    var sha256 by remember { mutableStateOf("") }
     var releaseNotes by remember {
         mutableStateOf("• اضافه شدن کاربران جدید: مهدی فاریابی (مدیر مدرسه) و یاسین دراهکی (معاون پرورشی)\n• به‌روزرسانی سیستم رنک‌ها و سطوح دسترسی کادر مدرسه\n• بهینه‌سازی کامل سرعت و همگام‌سازی ابری")
     }
     var isForceUpdate by remember { mutableStateOf(false) }
     var downloadUrl by remember {
-        mutableStateOf("https://github.com/aistudio-nezamyar/releases/download/v1.0.6/nezamyar-v1.0.6.apk")
+        mutableStateOf(currentUpdateInfo?.apkUrl?.ifBlank { null } ?: "https://github.com/HosseinVexter/Vexter-IP-Scanner/releases/download/v1.1.0/app-release.apk")
     }
+    var isTestingUrl by remember { mutableStateOf(false) }
+    var urlTestResult by remember { mutableStateOf<String?>(null) }
+    var urlTestSuccess by remember { mutableStateOf<Boolean?>(null) }
+
 
     // Selected APK file details
     var selectedFileUri by remember { mutableStateOf<Uri?>(null) }
     var selectedFileName by remember { mutableStateOf<String?>(null) }
-    var selectedFileSize by remember { mutableLongStateOf(16_200_000L) }
+    var selectedFileSize by remember { mutableLongStateOf(0L) }
 
     // Upload progress state
     var isUploading by remember { mutableStateOf(false) }
@@ -161,6 +169,15 @@ fun PublishAppUpdateScreen(
                 selectedFileName = "nezamyar-update.apk"
             }
 
+            // Fallback for real size via file descriptor if query size is 0
+            if (selectedFileSize <= 0L) {
+                try {
+                    context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
+                        selectedFileSize = pfd.statSize
+                    }
+                } catch (_: Exception) {}
+            }
+
             // Automatically suggest versionName from filename if pattern matches (e.g., v1.0.4.apk)
             selectedFileName?.let { name ->
                 val match = Regex("""v?([0-9]+\.[0-9]+\.[0-9]+)""").find(name)
@@ -170,55 +187,56 @@ fun PublishAppUpdateScreen(
                     downloadUrl = "https://github.com/aistudio-nezamyar/releases/download/v$extracted/nezamyar-v$extracted.apk"
                 }
             }
+
+            // Calculate SHA-256 from chosen APK file
+            scope.launch(Dispatchers.IO) {
+                try {
+                    context.contentResolver.openInputStream(uri)?.use { stream ->
+                        val digest = java.security.MessageDigest.getInstance("SHA-256")
+                        val buffer = ByteArray(8192)
+                        var bytes: Int
+                        while (stream.read(buffer).also { bytes = it } != -1) {
+                            digest.update(buffer, 0, bytes)
+                        }
+                        val hex = digest.digest().joinToString("") { "%02x".format(it) }
+                        withContext(Dispatchers.Main) {
+                            sha256 = hex
+                        }
+                    }
+                } catch (_: Exception) {}
+            }
         }
     }
 
+
     fun startPublishProcess() {
+        val cleanUrl = downloadUrl.trim()
         if (versionName.isBlank()) {
             Toast.makeText(context, "لطفاً شماره نسخه را مشخص نمایید.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (!InAppUpdateManager.isValidDownloadUrl(cleanUrl)) {
+            Toast.makeText(context, "لطفاً یک لینک معتبر HTTPS برای فایل APK وارد نمایید.", Toast.LENGTH_LONG).show()
             return
         }
 
         isUploading = true
         uploadProgress = 0f
         uploadSuccess = false
-        uploadStatusText = "در حال آماده‌سازی و اعتبارسنجی پکیج APK..."
+        uploadStatusText = "در حال بررسی دسترسی به فایل در سرور..."
 
         scope.launch {
-            // High-fidelity upload simulation & file saving into app cloud storage
             try {
-                // 1. If file chosen from URI, read and store into local storage cache
-                selectedFileUri?.let { uri ->
-                    withContext(Dispatchers.IO) {
-                        val input = context.contentResolver.openInputStream(uri)
-                        val updatesDir = File(context.filesDir, "published_updates").apply { mkdirs() }
-                        val outFile = File(updatesDir, "nezamyar-v$versionName.apk")
-                        input?.use { inStream ->
-                            FileOutputStream(outFile).use { outStream ->
-                                inStream.copyTo(outStream)
-                            }
-                        }
-                    }
+                // Query genuine remote file size from the server
+                val remoteSize: Long = withContext(Dispatchers.IO) {
+                    ApkDownloader.queryRemoteFileSize(cleanUrl)
                 }
 
-                // 2. Realistic progress bar with milestones
-                val steps = listOf(
-                    "در حال فشرده‌سازی و هش‌گذاری بسته به‌روزرسانی..." to 0.25f,
-                    "در حال بارگذاری فایل APK در سرور کلود (Firebase & CDN)..." to 0.65f,
-                    "در حال ثبت اطلاعات نسخه جدید در پایگاه داده جهانی..." to 0.90f,
-                    "در حال فعال‌سازی اعلان به‌روزرسانی برای تمام کاربران و نسخه‌های قبل..." to 1.0f
-                )
+                val finalSize = if (remoteSize > 0L) remoteSize else selectedFileSize
 
-                for ((status, targetProg) in steps) {
-                    uploadStatusText = status
-                    while (uploadProgress < targetProg) {
-                        delay(50)
-                        uploadProgress = (uploadProgress + 0.05f).coerceAtMost(targetProg)
-                    }
-                    delay(200)
-                }
+                uploadProgress = 0.5f
+                uploadStatusText = "در حال ثبت اطلاعات نسخه جدید در فایربیس..."
 
-                // 3. Save to Firebase Realtime Database
                 val sdf = SimpleDateFormat("yyyy/MM/dd", Locale.getDefault())
                 val todayPersian = try {
                     com.example.core.utils.DateTimeUtils.getCurrentPersianDate()
@@ -227,30 +245,31 @@ fun PublishAppUpdateScreen(
                 }
 
                 val newUpdate = AppUpdateInfo(
-                    latestVersionCode = versionCode,
-                    latestVersionName = versionName.trim(),
-                    minRequiredVersionCode = if (isForceUpdate) versionCode else 1,
-                    isUpdateAvailable = true,
-                    isForceUpdate = isForceUpdate,
-                    releaseNotes = releaseNotes.trim(),
-                    downloadUrl = downloadUrl.trim(),
-                    apkSizeBytes = selectedFileSize,
-                    releaseDate = todayPersian
+                    versionCode = versionCode,
+                    versionName = versionName.trim(),
+                    minSupportedVersionCode = if (isForceUpdate) versionCode else minSupportedVersionCode,
+                    isForced = isForceUpdate,
+                    apkUrl = cleanUrl,
+                    updateMessage = releaseNotes.trim(),
+                    sha256 = sha256.trim(),
+                    apkSizeBytes = finalSize,
+                    releaseDate = todayPersian,
+                    isUpdateAvailable = true
                 )
 
                 authViewModel.publishAppUpdate(newUpdate) { res ->
                     isUploading = false
                     if (res.isSuccess) {
                         uploadSuccess = true
-                        uploadStatusText = "به‌روزرسانی با موفقیت در تمام سرورها منتشر شد!"
+                        uploadStatusText = "نسخه جدید با موفقیت در فایربیس منتشر شد!"
                         Toast.makeText(
                             context,
-                            "🎉 نسخه جدید با موفقیت منتشر شد و برای تمام کاربران ارسال گردید.",
+                            "🎉 نسخه جدید با موفقیت ثبت شد و برای کاربران فعال گردید.",
                             Toast.LENGTH_LONG
                         ).show()
                     } else {
                         uploadSuccess = false
-                        uploadStatusText = "خطا در انتشار به‌روزرسانی در سرور."
+                        uploadStatusText = "خطا در ثبت اطلاعات در فایربیس."
                         Toast.makeText(
                             context,
                             res.exceptionOrNull()?.message ?: "خطا در ارتباط با سرور",
@@ -260,7 +279,7 @@ fun PublishAppUpdateScreen(
                 }
             } catch (e: Exception) {
                 isUploading = false
-                uploadStatusText = "خطا در پردازش فایل: ${e.message}"
+                uploadStatusText = "خطا در فرآیند انتشار: ${e.message}"
             }
         }
     }
@@ -269,15 +288,11 @@ fun PublishAppUpdateScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = "مرکز انتشار آپدیت سازنده",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        RgbRankBadge(text = "سید حسین", isSmall = true)
-                    }
+                    Text(
+                        text = "انتشار نسخه جدید",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
                 },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
@@ -320,25 +335,23 @@ fun PublishAppUpdateScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Security,
+                            imageVector = Icons.Default.CloudUpload,
                             contentDescription = null,
                             tint = Color.White,
-                            modifier = Modifier.size(28.dp)
+                            modifier = Modifier.size(26.dp)
                         )
                     }
                     Spacer(modifier = Modifier.width(14.dp))
                     Column(modifier = Modifier.weight(1f)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = "سید حسین موسوی نژاد (سازنده برنامه)",
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold,
-                                style = MaterialTheme.typography.titleSmall
-                            )
-                        }
+                        Text(
+                            text = "انتشار و مدیریت به‌روزرسانی",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleSmall
+                        )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = "مدیریت و ارسال سراسری به‌روزرسانی برای تمام نسخه‌های فعال",
+                            text = "ثبت اطلاعات نسخه جدید برای تمامی کلاینت‌های فعال",
                             color = Color(0xFF94A3B8),
                             style = MaterialTheme.typography.labelSmall
                         )
@@ -625,10 +638,7 @@ fun PublishAppUpdateScreen(
                     ) {
                         OutlinedTextField(
                             value = versionName,
-                            onValueChange = {
-                                versionName = it
-                                downloadUrl = "https://github.com/aistudio-nezamyar/releases/download/v${it.trim()}/nezamyar-v${it.trim()}.apk"
-                            },
+                            onValueChange = { versionName = it },
                             textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = VazirmatnFontFamily),
                             label = {
                                 Text(
@@ -641,7 +651,7 @@ fun PublishAppUpdateScreen(
                             },
                             placeholder = {
                                 Text(
-                                    text = "مثال: 1.0.6",
+                                    text = "مثال: 1.0.7",
                                     style = MaterialTheme.typography.bodyMedium.copy(
                                         fontFamily = VazirmatnFontFamily,
                                         fontWeight = FontWeight.Light
@@ -686,11 +696,15 @@ fun PublishAppUpdateScreen(
 
                     OutlinedTextField(
                         value = downloadUrl,
-                        onValueChange = { downloadUrl = it },
+                        onValueChange = {
+                            downloadUrl = it
+                            urlTestResult = null
+                            urlTestSuccess = null
+                        },
                         textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = VazirmatnFontFamily),
                         label = {
                             Text(
-                                text = "لینک دانلود مستقیم فایل APK",
+                                text = "لینک دانلود مستقیم فایل APK (مانند GitHub Releases)",
                                 style = MaterialTheme.typography.bodyMedium.copy(
                                     fontFamily = VazirmatnFontFamily,
                                     fontWeight = FontWeight.Light
@@ -699,8 +713,8 @@ fun PublishAppUpdateScreen(
                         },
                         placeholder = {
                             Text(
-                                text = "https://...",
-                                style = MaterialTheme.typography.bodyMedium.copy(
+                                text = "https://github.com/USER/REPO/releases/download/v1.0.0/app-release.apk",
+                                style = MaterialTheme.typography.bodySmall.copy(
                                     fontFamily = VazirmatnFontFamily,
                                     fontWeight = FontWeight.Light
                                 )
@@ -713,6 +727,89 @@ fun PublishAppUpdateScreen(
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth()
                     )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    // Test URL Action Button & Result Display
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedButton(
+                            onClick = {
+                                val urlToTest = downloadUrl.trim()
+                                if (!InAppUpdateManager.isValidDownloadUrl(urlToTest)) {
+                                    urlTestSuccess = false
+                                    urlTestResult = "آدرس باید با پروتکل امن https:// آغاز شود."
+                                    return@OutlinedButton
+                                }
+                                scope.launch(Dispatchers.IO) {
+                                    withContext(Dispatchers.Main) {
+                                        isTestingUrl = true
+                                        urlTestResult = null
+                                        urlTestSuccess = null
+                                    }
+                                    try {
+                                        val realSize = ApkDownloader.queryRemoteFileSize(urlToTest)
+                                        withContext(Dispatchers.Main) {
+                                            if (realSize > 0L) {
+                                                selectedFileSize = realSize
+                                                val mb = String.format(Locale.US, "%.1f", realSize / (1024.0 * 1024.0))
+                                                urlTestSuccess = true
+                                                urlTestResult = "لینک معتبر است. حجم واقعی سرور: $mb مگابایت ($realSize بایت)".toPersianDigits()
+                                            } else {
+                                                urlTestSuccess = false
+                                                urlTestResult = "سرور پاسخ مناسب نداد یا حجم فایل صفر است (خطای عدم دسترسی یا ۴۰۴)."
+                                            }
+                                        }
+                                    } catch (e: Exception) {
+                                        withContext(Dispatchers.Main) {
+                                            urlTestSuccess = false
+                                            urlTestResult = "خطا در استعلام: ${e.message}"
+                                        }
+                                    } finally {
+                                        withContext(Dispatchers.Main) {
+                                            isTestingUrl = false
+                                        }
+                                    }
+                                }
+                            },
+                            enabled = !isTestingUrl && downloadUrl.isNotBlank(),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            if (isTestingUrl) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp,
+                                    color = SchoolBluePrimary
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("در حال بررسی...", style = MaterialTheme.typography.labelSmall)
+                            } else {
+                                Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("بررسی لینک و دریافت حجم از سرور", style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                    }
+
+                    urlTestResult?.let { resText ->
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (urlTestSuccess == true) Color(0xFFF0FDF4) else Color(0xFFFEF2F2),
+                            border = BorderStroke(1.dp, if (urlTestSuccess == true) Color(0xFF86EFAC) else Color(0xFFFCA5A5)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = resText,
+                                style = MaterialTheme.typography.labelSmall.copy(fontFamily = VazirmatnFontFamily),
+                                color = if (urlTestSuccess == true) Color(0xFF166534) else Color(0xFF991B1B),
+                                modifier = Modifier.padding(8.dp)
+                            )
+                        }
+                    }
 
                     Spacer(modifier = Modifier.height(12.dp))
 
@@ -743,6 +840,63 @@ fun PublishAppUpdateScreen(
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth()
                     )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = sha256,
+                            onValueChange = { sha256 = it },
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = VazirmatnFontFamily),
+                            label = {
+                                Text(
+                                    text = "هش امنیتی SHA-256 (اختیاری)",
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        fontFamily = VazirmatnFontFamily,
+                                        fontWeight = FontWeight.Light
+                                    )
+                                )
+                            },
+                            placeholder = {
+                                Text(
+                                    text = "با انتخاب فایل خودکار محاسبه می‌شود...",
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        fontFamily = VazirmatnFontFamily,
+                                        fontWeight = FontWeight.Light
+                                    )
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(Icons.Default.Security, contentDescription = null, tint = SchoolBluePrimary)
+                            },
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.weight(1.3f)
+                        )
+
+                        OutlinedTextField(
+                            value = minSupportedVersionCode.toString(),
+                            onValueChange = {
+                                minSupportedVersionCode = it.toIntOrNull() ?: minSupportedVersionCode
+                            },
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = VazirmatnFontFamily),
+                            label = {
+                                Text(
+                                    text = "حداقل نسخه مجاز",
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        fontFamily = VazirmatnFontFamily,
+                                        fontWeight = FontWeight.Light
+                                    )
+                                )
+                            },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.weight(0.7f)
+                        )
+                    }
 
                     Spacer(modifier = Modifier.height(12.dp))
 

@@ -215,7 +215,7 @@ fun ProfileScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "ویرایش کامل مشخصات، رنک و رنگ RGB",
+                            text = "ویرایش مشخصات",
                             fontWeight = FontWeight.Bold,
                             fontSize = 13.sp
                         )

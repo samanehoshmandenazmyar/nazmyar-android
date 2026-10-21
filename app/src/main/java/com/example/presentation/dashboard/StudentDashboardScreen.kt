@@ -61,8 +61,13 @@ import com.example.core.session.SessionManager
 import com.example.domain.model.RankPermission
 import com.example.domain.model.User
 import com.example.domain.model.toPersianDigits
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.LaunchedEffect
+import com.example.core.banner.BannerManager
 import com.example.presentation.components.BehaviorRecordCard
+import com.example.presentation.components.HomeBannerCarousel
 import com.example.presentation.components.NezamYarHeader
+import com.example.presentation.components.PtaElectionHomeBanner
 import com.example.presentation.components.StudentRankBadge
 import com.example.presentation.viewmodel.MainViewModel
 import com.example.ui.theme.IncidentRed
@@ -81,14 +86,27 @@ fun StudentDashboardScreen(
     onNavigateToDisciplinary: () -> Unit = {},
     onNavigateToReports: () -> Unit = {},
     onNavigateToStudents: () -> Unit = {},
+    onNavigateToPtaVoting: () -> Unit = {},
     onMenuClick: () -> Unit = {}
 ) {
+    val context = LocalContext.current
+    LaunchedEffect(Unit) {
+        BannerManager.init(context)
+    }
+    val allBanners by BannerManager.banners.collectAsState()
     val notifications by mainViewModel.notifications.collectAsState()
     val allRecords by mainViewModel.records.collectAsState()
     val allStudents by mainViewModel.students.collectAsState()
     val unreadNotifs = notifications.count { !it.read }
 
     val currentStudent = allStudents.firstOrNull { it.id == user?.id || it.studentCode == user?.studentCode }
+    val studentBanners = remember(allBanners, currentStudent?.grade, currentStudent?.className, user) {
+        BannerManager.getBannersForUser(
+            user = user,
+            studentGrade = currentStudent?.grade,
+            studentClassName = currentStudent?.className
+        )
+    }
     val myRecords = allRecords.filter { it.studentId == currentStudent?.id || (user != null && it.studentId == user.id) }
     val currentScore = currentStudent?.score ?: 100
 
@@ -116,7 +134,7 @@ fun StudentDashboardScreen(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "🎉 تبریک صمیمانه ارتقای رنک!",
+                        text = "تبریک ارتقای رنک",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
@@ -227,7 +245,7 @@ fun StudentDashboardScreen(
                     colors = ButtonDefaults.buttonColors(containerColor = SchoolBluePrimary),
                     shape = RoundedCornerShape(10.dp)
                 ) {
-                    Text("متشکرم، شروع فعالیت ✨", fontWeight = FontWeight.Bold)
+                    Text("متشکرم، ادامه", fontWeight = FontWeight.Bold)
                 }
             },
             shape = RoundedCornerShape(18.dp)
@@ -249,6 +267,25 @@ fun StudentDashboardScreen(
             )
         }
 
+        // 16:9 Auto-sliding Home Banners Carousel
+        if (studentBanners.isNotEmpty()) {
+            item {
+                HomeBannerCarousel(
+                    banners = studentBanners,
+                    canManage = false,
+                    modifier = Modifier.padding(vertical = 4.dp)
+                )
+            }
+        }
+
+        // گزینه موقت: انتخاب انجمن و اولیا و مربیان
+        item {
+            PtaElectionHomeBanner(
+                onClick = onNavigateToPtaVoting,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+            )
+        }
+
         // Promoted Rank Celebration Banner
         if (user != null && user.rankTitle != "دانش‌آموز") {
             item {
@@ -266,7 +303,12 @@ fun StudentDashboardScreen(
                             .padding(14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(text = "🏆", fontSize = 28.sp)
+                        Icon(
+                            imageVector = Icons.Default.EmojiEvents,
+                            contentDescription = null,
+                            tint = Color(0xFFD97706),
+                            modifier = Modifier.size(28.dp)
+                        )
                         Spacer(modifier = Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
@@ -441,7 +483,7 @@ fun StudentDashboardScreen(
                                     .fillMaxWidth()
                                     .padding(vertical = 3.dp)
                             ) {
-                                Text("مشاهده پرونده و لیست دانش‌آموزان", fontWeight = FontWeight.Bold)
+                                Text("مشاهده لیست مخاطب‌ها", fontWeight = FontWeight.Bold)
                             }
                         }
 

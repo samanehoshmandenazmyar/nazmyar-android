@@ -108,4 +108,50 @@ object SessionManager {
     fun saveCustomProxyUrl(url: String) {}
 
     fun getCustomProxyUrl(): String? = null
+
+    private const val KEY_LAST_UPDATE_INFO = "cached_last_app_update_info"
+
+    fun saveLastKnownUpdate(info: com.example.domain.model.AppUpdateInfo) {
+        try {
+            val json = JSONObject().apply {
+                put("version_code", info.versionCode)
+                put("version_name", info.versionName)
+                put("apk_url", info.apkUrl)
+                put("update_message", info.updateMessage)
+                put("is_forced", info.isForced)
+                put("min_supported_version_code", info.minSupportedVersionCode)
+                put("sha256", info.sha256)
+                put("apk_size_bytes", info.apkSizeBytes)
+                put("release_date", info.releaseDate)
+                put("is_available", info.isUpdateAvailable)
+            }
+            prefs?.edit()?.putString(KEY_LAST_UPDATE_INFO, json.toString())?.apply()
+        } catch (_: Exception) {}
+    }
+
+    fun getLastKnownUpdate(): com.example.domain.model.AppUpdateInfo? {
+        val str = prefs?.getString(KEY_LAST_UPDATE_INFO, null) ?: return null
+        return try {
+            val obj = JSONObject(str)
+            com.example.domain.model.AppUpdateInfo(
+                versionCode = obj.optInt("version_code", obj.optInt("latestVersionCode", 8)),
+                versionName = obj.optString("version_name", obj.optString("latestVersionName", "1.0.7")),
+                apkUrl = obj.optString("apk_url", obj.optString("downloadUrl", "")),
+                updateMessage = obj.optString("update_message", obj.optString("releaseNotes", "")),
+                isForced = obj.optBoolean("is_forced", obj.optBoolean("isForceUpdate", false)),
+                minSupportedVersionCode = obj.optInt("min_supported_version_code", obj.optInt("minRequiredVersionCode", 1)),
+                sha256 = obj.optString("sha256", ""),
+                apkSizeBytes = obj.optLong("apk_size_bytes", obj.optLong("apkSizeBytes", 0L)),
+                releaseDate = obj.optString("release_date", obj.optString("releaseDate", "")),
+                isUpdateAvailable = obj.optBoolean("is_available", false)
+            )
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    fun clearLastKnownUpdate() {
+        prefs?.edit()?.remove(KEY_LAST_UPDATE_INFO)?.apply()
+    }
 }
+

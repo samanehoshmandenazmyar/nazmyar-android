@@ -1,0 +1,33 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidChatMessage(data) {
+      return data.id is string && data.id.size() > 0 && data.id.size() <= 128 &&
+             data.classGroupId is string && data.classGroupId.size() > 0 && data.classGroupId.size() <= 64 &&
+             data.senderId is string && data.senderId.size() > 0 && data.senderId.size() <= 128 &&
+             data.senderName is string && data.senderName.size() > 0 && data.senderName.size() <= 100 &&
+             data.text is string && data.text.size() <= 5000 &&
+             (!('senderRole' in data) || (data.senderRole is string && data.senderRole.size() <= 64)) &&
+             (!('timeFormatted' in data) || (data.timeFormatted is string && data.timeFormatted.size() <= 32)) &&
+             (!('timestamp' in data) || (data.timestamp is int || data.timestamp is timestamp)) &&
+             (!('isAttendanceCard' in data) || data.isAttendanceCard is bool) &&
+             (!('attendanceData' in data) || data.attendanceData is map);
+    }
+
+    match /class_groups/{groupId}/messages/{messageId} {
+      allow get, list: if true;
+      allow create: if isValidId(groupId) && isValidId(messageId) && isValidChatMessage(request.resource.data);
+      allow update: if isValidId(groupId) && isValidId(messageId) && isValidChatMessage(request.resource.data);
+      allow delete: if isValidId(groupId) && isValidId(messageId);
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

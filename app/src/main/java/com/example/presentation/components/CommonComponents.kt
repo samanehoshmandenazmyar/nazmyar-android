@@ -25,7 +25,15 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.HowToVote
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Phone
+import com.example.domain.model.RankPermission
+import com.example.data.demo.DemoData
+import com.example.domain.model.UserRole
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -36,8 +44,21 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.FilterChip
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.heightIn
+import com.example.domain.model.matchesQuery
+import com.example.ui.theme.VazirmatnFontFamily
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,8 +70,10 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.demo.AllowedStudentsRegistry
 import com.example.domain.model.BehaviorRecord
 import com.example.domain.model.RecordType
 import com.example.domain.model.SeverityLevel
@@ -706,9 +729,51 @@ fun SeverityBadge(severity: SeverityLevel) {
 @Composable
 fun SpecialUserListItemCard(
     user: User,
+    allUsers: List<User> = emptyList(),
+    matchingStudent: Student? = null,
     onClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val isCreator = user.isCreator ||
+        user.id == "user_creator_hossein" ||
+        user.studentCode == "454545" ||
+        user.name.trim() == "سید حسین موسوی نژاد" ||
+        user.phone == "09923072572"
+
+    if (isCreator) {
+        val creatorStudent = matchingStudent ?: Student(
+            id = user.id.ifBlank { "user_creator_hossein" },
+            firstName = "سید حسین",
+            lastName = "موسوی نژاد",
+            studentCode = "454545",
+            nationalId = "454545",
+            grade = "پایه هشتم",
+            className = "کلاس 8/2",
+            parentPhone = user.phone.ifBlank { "09923072572" },
+            email = "hosseinvexter@gmail.com",
+            rankTitle = "سازنده",
+            rankColorHex = "#1E40AF",
+            permissions = listOf(
+                RankPermission.REGISTER_POSITIVE,
+                RankPermission.REGISTER_DISCIPLINARY,
+                RankPermission.VIEW_REPORTS,
+                RankPermission.ACCESS_GAMES,
+                RankPermission.VIEW_STUDENT_PROFILES,
+                RankPermission.EDIT_CLASS_INFO,
+                RankPermission.SPECIAL_BADGE
+            ),
+            isRegistered = true,
+            schoolId = user.schoolId.ifBlank { DemoData.DEFAULT_SCHOOL_ID }
+        )
+        StudentListItemCard(
+            student = creatorStudent,
+            allUsers = allUsers,
+            onClick = onClick,
+            modifier = modifier
+        )
+        return
+    }
+
     Card(
         modifier = modifier
             .fillMaxWidth()
@@ -716,145 +781,7 @@ fun SpecialUserListItemCard(
             .testTag("special_user_card_${user.id}"),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(52.dp)
-                    .clip(CircleShape)
-                    .background(
-                        if (user.isCreator) {
-                            androidx.compose.ui.graphics.Brush.linearGradient(
-                                listOf(Color(0xFF1E3A8A), Color(0xFF2563EB))
-                            )
-                        } else {
-                            androidx.compose.ui.graphics.SolidColor(SchoolBlueContainer)
-                        }
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = user.name.take(2).ifBlank { "ویژه" },
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.weight(1f, fill = false)
-                    ) {
-                        Text(
-                            text = user.name,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        UserRankBadge(
-                            user = user,
-                            isSmall = true
-                        )
-                    }
-
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = if (user.isCreator) Color(0xFFEFF6FF) else if (user.role == UserRole.MANAGER) Color(0xFFFEF3C7) else if (user.role == UserRole.COUNSELOR) Color(0xFFF3E8FF) else Color(0xFFEDE9FE)
-                    ) {
-                        Text(
-                            text = if (user.isCreator) "سازنده سامانه 👑" else if (user.role == UserRole.MANAGER) "مدیر مدرسه 🏫" else if (user.role == UserRole.COUNSELOR) "معاون پرورشی 🌟" else "فرد ویژه ⭐",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (user.isCreator) Color(0xFF1E40AF) else if (user.role == UserRole.MANAGER) Color(0xFFB45309) else if (user.role == UserRole.COUNSELOR) Color(0xFF7C3AED) else Color(0xFF6D28D9),
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "نقش: ${user.role.farsiTitle}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    if (user.studentCode.isNotBlank()) {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "•",
-                            color = MaterialTheme.colorScheme.outline
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "کد: ${user.studentCode.toPersianDigits()}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                if (user.phone.isNotBlank() || user.email.isNotBlank()) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (user.phone.isNotBlank()) {
-                            Text(
-                                text = "تماس: ${user.phone.toPersianDigits()}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-                        if (user.email.isNotBlank()) {
-                            if (user.phone.isNotBlank()) {
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "•",
-                                    color = MaterialTheme.colorScheme.outline
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                            }
-                            Text(
-                                text = user.email,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun StudentListItemCard(
-    student: Student,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .testTag("student_card_${student.id}"),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Row(
@@ -871,114 +798,202 @@ fun StudentListItemCard(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = (student.firstName.take(1) + student.lastName.take(1)).ifBlank { student.fullName.take(1) },
-                    style = MaterialTheme.typography.titleMedium,
-                    color = SchoolBluePrimary,
-                    fontWeight = FontWeight.Bold
+                    text = user.name.take(2).ifBlank { "کاربر" },
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontFamily = VazirmatnFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        color = SchoolBluePrimary
+                    )
                 )
             }
 
             Spacer(modifier = Modifier.width(12.dp))
 
-            Column(modifier = Modifier.weight(1f)) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                // Name only (no role tag like "مدیر مدرسه" or "مسئول پرورشی")
+                Text(
+                    text = user.name,
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontFamily = VazirmatnFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                )
+
+                // ONLY CONTACT PHONE NUMBER (no role text, no "نقش: ...")
+                if (user.phone.isNotBlank()) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Phone,
+                            contentDescription = null,
+                            tint = SchoolBluePrimary,
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Text(
+                            text = "تماس: ${user.phone.toPersianDigits()}",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontFamily = VazirmatnFontFamily,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun StudentListItemCard(
+    student: Student,
+    allUsers: List<User> = emptyList(),
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val normStudentName = AllowedStudentsRegistry.normalize(student.fullName)
+    val sCode = student.studentCode.trim()
+    val sId = student.id
+    val isCreatorCard = (sId == "user_creator_hossein" || sCode == "454545" || normStudentName == AllowedStudentsRegistry.normalize("سید حسین موسوی نژاد"))
+
+    val fatherUser = remember(allUsers, student) {
+        allUsers.firstOrNull { u ->
+            u.role == UserRole.PARENT &&
+            (u.gender.contains("پدر") || u.gender.contains("آقا") || u.rankTitle.contains("پدر") || (!u.gender.contains("مادر") && !u.rankTitle.contains("مادر"))) &&
+            (u.studentCode == sCode ||
+             (isCreatorCard && (u.studentCode == "454545" || u.childStudentIds.contains("454545") || u.childStudentIds.contains("user_creator_hossein"))) ||
+             u.childStudentIds.contains(sId) ||
+             u.childStudentIds.contains(sCode) ||
+             (normStudentName.isNotBlank() && AllowedStudentsRegistry.normalize(u.name) == normStudentName) ||
+             (normStudentName.isNotBlank() && u.childStudentIds.any { AllowedStudentsRegistry.normalize(it) == normStudentName }))
+        }
+    }
+
+    val motherUser = remember(allUsers, student) {
+        allUsers.firstOrNull { u ->
+            u.role == UserRole.PARENT &&
+            (u.gender.contains("مادر") || u.gender.contains("خانم") || u.rankTitle.contains("مادر")) &&
+            (u.studentCode == sCode ||
+             (isCreatorCard && (u.studentCode == "454545" || u.childStudentIds.contains("454545") || u.childStudentIds.contains("user_creator_hossein"))) ||
+             u.childStudentIds.contains(sId) ||
+             u.childStudentIds.contains(sCode) ||
+             (normStudentName.isNotBlank() && AllowedStudentsRegistry.normalize(u.name) == normStudentName) ||
+             (normStudentName.isNotBlank() && u.childStudentIds.any { AllowedStudentsRegistry.normalize(it) == normStudentName }))
+        }
+    }
+
+    // Main Outer Container Card
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .testTag("student_card_${student.id}"),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // ================= 1. TOP SHAPE: FATHER =================
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                color = if (fatherUser != null) Color(0xFFEFF6FF) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                border = BorderStroke(
+                    width = 0.8.dp,
+                    color = if (fatherUser != null) Color(0xFF93C5FD) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                )
+            ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.weight(1f, fill = false)
                     ) {
-                        Text(
-                            text = student.fullName,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        StudentMultiRankBadge(
-                            student = student,
-                            isSmall = true
-                        )
-                    }
-
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = if (student.score >= 90) PositiveGreenContainer else if (student.score >= 80) WarningAmberContainer else IncidentRedContainer
-                    ) {
-                        Text(
-                            text = "نمره: ${student.score.toPersianDigits()}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (student.score >= 90) OnPositiveGreenContainer else if (student.score >= 80) OnWarningAmberContainer else OnIncidentRedContainer,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "کد: ${student.studentCode.toPersianDigits()}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "•",
-                        color = MaterialTheme.colorScheme.outline
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "${student.grade} - ${student.className}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Surface(
-                        shape = RoundedCornerShape(6.dp),
-                        color = PositiveGreenContainer
-                    ) {
-                        Text(
-                            text = "⭐ ${student.positiveCount.toPersianDigits()} مثبت",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = OnPositiveGreenContainer,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
-                    }
-
-                    if (student.warningCount > 0) {
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = WarningAmberContainer
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clip(CircleShape)
+                                .background(if (fatherUser != null) Color(0xFFBFDBFE) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = "⚠️ ${student.warningCount.toPersianDigits()} تذکر",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = OnWarningAmberContainer,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            Icon(
+                                imageVector = Icons.Default.Person,
+                                contentDescription = null,
+                                tint = if (fatherUser != null) Color(0xFF1D4ED8) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
+                                modifier = Modifier.size(15.dp)
                             )
                         }
+                        Text(
+                            text = if (fatherUser != null) "پدر دانش‌آموز" else "پدر به برنامه ورود نکرده است",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontFamily = VazirmatnFontFamily,
+                                fontWeight = if (fatherUser != null) FontWeight.Bold else FontWeight.Normal,
+                                color = if (fatherUser != null) Color(0xFF1E3A8A) else MaterialTheme.colorScheme.onSurfaceVariant
+                            ),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
 
-                    if (student.disciplinaryCount > 0) {
+                    if (fatherUser != null) {
                         Surface(
                             shape = RoundedCornerShape(6.dp),
-                            color = IncidentRedContainer
+                            color = Color(0xFFDCFCE7),
+                            border = BorderStroke(0.5.dp, Color(0xFF86EFAC))
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(3.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.CheckCircle,
+                                    contentDescription = null,
+                                    tint = Color(0xFF15803D),
+                                    modifier = Modifier.size(11.dp)
+                                )
+                                Text(
+                                    text = "وارد شده",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontFamily = VazirmatnFontFamily,
+                                        fontSize = 10.sp,
+                                        color = Color(0xFF15803D),
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                )
+                            }
+                        }
+                    } else {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.surface,
+                            border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                         ) {
                             Text(
-                                text = "🚨 ${student.disciplinaryCount.toPersianDigits()} تخلف",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = OnIncidentRedContainer,
+                                text = "عدم ورود",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontFamily = VazirmatnFontFamily,
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
+                                ),
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                             )
                         }
@@ -986,14 +1001,551 @@ fun StudentListItemCard(
                 }
             }
 
-            Spacer(modifier = Modifier.width(8.dp))
+            // ================= 2. MIDDLE SHAPE: STUDENT (LARGER & PROMINENT) =================
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surface,
+                border = BorderStroke(1.2.dp, SchoolBluePrimary.copy(alpha = 0.35f))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Larger prominent avatar
+                    Box(
+                        modifier = Modifier
+                            .size(54.dp)
+                            .clip(CircleShape)
+                            .background(SchoolBlueContainer),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = (student.firstName.take(1) + student.lastName.take(1)).ifBlank { student.fullName.take(1) },
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontFamily = VazirmatnFontFamily,
+                                fontWeight = FontWeight.Bold,
+                                color = SchoolBluePrimary
+                            )
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(12.dp))
+
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        // Student Full Name (Wraps cleanly without clipping even if very long)
+                        Text(
+                            text = student.fullName,
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontFamily = VazirmatnFontFamily,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            ),
+                            lineHeight = 22.sp
+                        )
+
+                        // Multi Rank Badges (placed cleanly under the name)
+                        StudentMultiRankBadge(
+                            student = student,
+                            isSmall = true
+                        )
+
+                        Spacer(modifier = Modifier.height(2.dp))
+
+                        // Details row: Student Code & Grade / Class
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = "کد: ${student.studentCode.toPersianDigits()}",
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    fontFamily = VazirmatnFontFamily,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            )
+                            Text(
+                                text = "•",
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                            Text(
+                                text = "${student.grade} - ${student.className}",
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    fontFamily = VazirmatnFontFamily,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            )
+                        }
+
+                        if (student.parentPhone.isNotBlank()) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Phone,
+                                    contentDescription = null,
+                                    tint = SchoolBluePrimary,
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Text(
+                                    text = "تماس: ${student.parentPhone.toPersianDigits()}",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontFamily = VazirmatnFontFamily,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                )
+                            }
+                        }
+
+                        // Registration status tag if not registered in the app
+                        if (!student.isRegistered) {
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant)
+                            ) {
+                                Text(
+                                    text = "در برنامه ثبت‌نام نکرده است",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontFamily = VazirmatnFontFamily,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontSize = 10.sp
+                                    ),
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "مشاهده پرونده",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+
+            // ================= 3. BOTTOM SHAPE: MOTHER =================
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                color = if (motherUser != null) Color(0xFFFDF2F8) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                border = BorderStroke(
+                    width = 0.8.dp,
+                    color = if (motherUser != null) Color(0xFFF472B6) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                )
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.weight(1f, fill = false)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clip(CircleShape)
+                                .background(if (motherUser != null) Color(0xFFFCE7F3) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Person,
+                                contentDescription = null,
+                                tint = if (motherUser != null) Color(0xFFBE185D) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
+                                modifier = Modifier.size(15.dp)
+                            )
+                        }
+                        Text(
+                            text = if (motherUser != null) "مادر دانش‌آموز" else "مادر به برنامه ورود نکرده است",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontFamily = VazirmatnFontFamily,
+                                fontWeight = if (motherUser != null) FontWeight.Bold else FontWeight.Normal,
+                                color = if (motherUser != null) Color(0xFF831843) else MaterialTheme.colorScheme.onSurfaceVariant
+                            ),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    if (motherUser != null) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = Color(0xFFDCFCE7),
+                            border = BorderStroke(0.5.dp, Color(0xFF86EFAC))
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(3.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.CheckCircle,
+                                    contentDescription = null,
+                                    tint = Color(0xFF15803D),
+                                    modifier = Modifier.size(11.dp)
+                                )
+                                Text(
+                                    text = "وارد شده",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontFamily = VazirmatnFontFamily,
+                                        fontSize = 10.sp,
+                                        color = Color(0xFF15803D),
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                )
+                            }
+                        }
+                    } else {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.surface,
+                            border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        ) {
+                            Text(
+                                text = "عدم ورود",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontFamily = VazirmatnFontFamily,
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
+                                ),
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun PtaElectionHomeBanner(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    hasVoted: Boolean = false
+) {
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .testTag("pta_election_home_banner"),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        border = BorderStroke(
+            width = 1.5.dp,
+            color = SchoolBluePrimary.copy(alpha = 0.5f)
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(50.dp)
+                    .clip(CircleShape)
+                    .background(SchoolBluePrimary.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.HowToVote,
+                    contentDescription = null,
+                    tint = SchoolBluePrimary,
+                    modifier = Modifier.size(26.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "انتخاب انجمن و اولیا و مربیان",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = Color(0xFFFEF3C7)
+                    ) {
+                        Text(
+                            text = "موقت",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFFB45309),
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(2.dp))
+
+                Text(
+                    text = if (hasVoted) "رأی شما ثبت شده است • برای مشاهده درصدها و نتایج کلیک کنید"
+                           else "رأی‌گیری آنلاین و مشاهده ۱۰ نامزد محترم (ثبت فوری رأی)",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Spacer(modifier = Modifier.width(6.dp))
 
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = "مشاهده پرونده",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(18.dp)
+                contentDescription = "ورود به بخش رأی‌گیری",
+                tint = SchoolBluePrimary,
+                modifier = Modifier.size(20.dp)
             )
         }
     }
 }
+
+/**
+ * Dialog for selecting a student with real-time search (by first name, last name, full name, or code)
+ * and grade/class filtering.
+ */
+@Composable
+fun SearchableStudentPickerDialog(
+    students: List<Student>,
+    selectedStudentId: String? = null,
+    title: String = "انتخاب و جستجوی دانش‌آموز",
+    onSelectStudent: (Student) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var searchQuery by remember { mutableStateOf("") }
+    val grades = listOf("همه", "هفتم یک", "هفتم دو", "هشتم یک", "هشتم دو", "نهم یک", "نهم دو")
+    var selectedGrade by remember { mutableStateOf("همه") }
+
+    val filteredStudents = remember(students, searchQuery, selectedGrade) {
+        students.filter { s ->
+            val matchGrade = if (searchQuery.isNotBlank()) true else when (selectedGrade) {
+                "همه" -> true
+                "هفتم یک" -> s.className.contains("7/1") || s.className.contains("یک")
+                "هفتم دو" -> s.className.contains("7/2") || s.className.contains("دو")
+                "هشتم یک" -> s.className.contains("8/1") || s.className.contains("یک")
+                "هشتم دو" -> s.className.contains("8/2") || s.className.contains("دو")
+                "نهم یک" -> s.className.contains("9/1") || s.className.contains("یک")
+                "نهم دو" -> s.className.contains("9/2") || s.className.contains("دو")
+                else -> true
+            }
+            matchGrade && s.matchesQuery(searchQuery)
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Column {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontFamily = com.example.ui.theme.VazirmatnFontFamily,
+                        fontWeight = FontWeight.Bold
+                    )
+                )
+                Text(
+                    text = "جستجو بر اساس نام، نام خانوادگی، نام کامل یا کد دانش‌آموزی",
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontFamily = com.example.ui.theme.VazirmatnFontFamily,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 11.sp
+                    )
+                )
+            }
+        },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    placeholder = {
+                        Text(
+                            text = "مثال: فاریابی یا ابوالفضل...",
+                            fontFamily = com.example.ui.theme.VazirmatnFontFamily,
+                            fontSize = 12.sp
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(Icons.Default.Search, contentDescription = null, tint = com.example.ui.theme.SchoolBluePrimary)
+                    },
+                    trailingIcon = {
+                        if (searchQuery.isNotBlank()) {
+                            IconButton(onClick = { searchQuery = "" }) {
+                                Icon(Icons.Default.Clear, contentDescription = "پاک کردن")
+                            }
+                        }
+                    },
+                    singleLine = true
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    items(grades) { g ->
+                        FilterChip(
+                            selected = selectedGrade == g,
+                            onClick = { selectedGrade = g },
+                            label = { Text(g, fontSize = 11.sp, fontFamily = com.example.ui.theme.VazirmatnFontFamily) }
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = "${filteredStudents.size.toPersianDigits()} دانش‌آموز یافت شد",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontFamily = com.example.ui.theme.VazirmatnFontFamily,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    ),
+                    modifier = Modifier.padding(horizontal = 4.dp)
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                if (filteredStudents.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(150.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "دانش‌آموزی با این مشخصات یافت نشد.",
+                            fontFamily = com.example.ui.theme.VazirmatnFontFamily,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 350.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        items(filteredStudents, key = { it.id }) { s ->
+                            val isSelected = s.id == selectedStudentId
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onSelectStudent(s) },
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (isSelected) com.example.ui.theme.SchoolBluePrimary.copy(alpha = 0.12f)
+                                                     else MaterialTheme.colorScheme.surface
+                                ),
+                                border = if (isSelected) BorderStroke(1.5.dp, com.example.ui.theme.SchoolBluePrimary)
+                                         else BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .clip(CircleShape)
+                                            .background(com.example.ui.theme.SchoolBlueContainer),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = s.fullName.take(1),
+                                            style = MaterialTheme.typography.titleSmall,
+                                            color = com.example.ui.theme.SchoolBluePrimary,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.width(10.dp))
+
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = s.fullName,
+                                            style = MaterialTheme.typography.titleSmall.copy(
+                                                fontFamily = com.example.ui.theme.VazirmatnFontFamily,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        )
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                text = "${s.grade} - ${s.className}",
+                                                style = MaterialTheme.typography.labelSmall.copy(
+                                                    fontFamily = com.example.ui.theme.VazirmatnFontFamily,
+                                                    color = com.example.ui.theme.SchoolBluePrimary
+                                                )
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = "کد: ${s.studentCode.toPersianDigits()}",
+                                                style = MaterialTheme.typography.labelSmall.copy(
+                                                    fontFamily = com.example.ui.theme.VazirmatnFontFamily,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            )
+                                        }
+                                    }
+
+                                    if (!s.isRegistered) {
+                                        Surface(
+                                            shape = RoundedCornerShape(6.dp),
+                                            color = MaterialTheme.colorScheme.surfaceVariant,
+                                            border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant)
+                                        ) {
+                                            Text(
+                                                text = "ثبت‌نام نکرده",
+                                                style = MaterialTheme.typography.labelSmall.copy(
+                                                    fontFamily = com.example.ui.theme.VazirmatnFontFamily,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    fontSize = 10.sp
+                                                ),
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("بستن", fontFamily = com.example.ui.theme.VazirmatnFontFamily)
+            }
+        },
+        shape = RoundedCornerShape(20.dp)
+    )
+}
+
+

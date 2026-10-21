@@ -138,13 +138,25 @@ class AuthViewModel(
             return
         }
 
-        // بررسی اینکه آیا نام دانش‌آموز در لیست رسمی مدرسه وجود دارد یا خیر
-        if (role == UserRole.STUDENT && trimmedName != "سید حسین موسوی نژاد") {
-            val matchedAllowed = com.example.data.demo.AllowedStudentsRegistry.findMatchingAllowedStudent(trimmedName)
-            if (matchedAllowed == null) {
+        val normInput = com.example.data.demo.AllowedStudentsRegistry.normalize(trimmedName)
+        val matchedAllowed = if (role == UserRole.STUDENT && trimmedName != "سید حسین موسوی نژاد") {
+            val matched = com.example.data.demo.AllowedStudentsRegistry.findMatchingAllowedStudent(trimmedName)
+            if (matched == null) {
                 _uiState.value = AuthUiState.Error("نام «$trimmedName» در لیست رسمی دانش‌آموزان مدرسه ثبت نشده است. فقط دانش‌آموزان موجود در لیست مجاز به ثبت‌نام هستند.")
                 return
             }
+            matched
+        } else null
+
+        // بررسی یکتا بودن نام و جلوگیری از ثبت‌نام تکراری
+        val existingUsers = authRepository.getSavedUsers()
+        val isDuplicate = existingUsers.any { u ->
+            com.example.data.demo.AllowedStudentsRegistry.normalize(u.name) == normInput ||
+            (matchedAllowed != null && com.example.data.demo.AllowedStudentsRegistry.findMatchingAllowedStudent(u.name)?.fullName == matchedAllowed.fullName)
+        }
+        if (isDuplicate) {
+            _uiState.value = AuthUiState.Error("کاربری با نام «$trimmedName» قبلاً در سامانه ثبت‌نام کرده است. با هر نام و نام خانوادگی فقط یک حساب مجاز است و امکان داشتن دو حساب با یک نام وجود ندارد.")
+            return
         }
 
         if (trimmedCode.isBlank() || trimmedCode.length != 6 || !trimmedCode.all { it.isDigit() }) {

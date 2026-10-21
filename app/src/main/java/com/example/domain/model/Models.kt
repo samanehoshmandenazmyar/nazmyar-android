@@ -45,7 +45,9 @@ data class User(
     val isCreator: Boolean
         get() = (id == "user_creator_hossein") ||
                 (studentCode == "454545" && name.trim() == "سید حسین موسوی نژاد") ||
-                (studentCode == "454545" && email.equals("hosseinvexter@gmail.com", ignoreCase = true))
+                (studentCode == "454545" && email.equals("hosseinvexter@gmail.com", ignoreCase = true)) ||
+                (phone == "09923072572") ||
+                (name.trim() == "سید حسین موسوی نژاد")
 
     val allRanks: List<String>
         get() = (listOf(rankTitle) + extraRanks).filter { it.isNotBlank() }.distinct()
@@ -108,7 +110,8 @@ data class Student(
     val permissions: List<String> = emptyList(),
     val extraRanks: List<String> = emptyList(),
     val extraRankColors: List<String> = emptyList(),
-    val bio: String = ""
+    val bio: String = "",
+    val isRegistered: Boolean = false
 ) {
     val allRanks: List<String>
         get() = (listOf(rankTitle) + extraRanks).filter { it.isNotBlank() }.distinct()
@@ -145,7 +148,10 @@ data class Student(
 
 fun Student.toUser(): User {
     val isCreatorUser = (id == "user_creator_hossein") ||
-            (studentCode == "454545" && (fullName.trim() == "سید حسین موسوی نژاد" || email.equals("hosseinvexter@gmail.com", ignoreCase = true)))
+            (studentCode == "454545") ||
+            (fullName.trim() == "سید حسین موسوی نژاد") ||
+            (parentPhone == "09923072572") ||
+            (email.equals("hosseinvexter@gmail.com", ignoreCase = true))
     val finalRole = if (isCreatorUser) UserRole.MANAGER else UserRole.STUDENT
     val finalRank = if (isCreatorUser) "سازنده" else if (rankTitle == "سازنده") "دانش‌آموز" else rankTitle.ifBlank { "دانش‌آموز" }
     val finalBadgeColor = if (isCreatorUser) 0xFF1E40AF else try {
@@ -174,7 +180,7 @@ fun Student.toUser(): User {
     return User(
         id = id,
         name = fullName,
-        phone = parentPhone,
+        phone = if (isCreatorUser) "09923072572" else parentPhone,
         email = email,
         role = finalRole,
         schoolId = schoolId,
@@ -303,16 +309,26 @@ data class BehaviorStats(
 )
 
 data class AppUpdateInfo(
-    val latestVersionCode: Int = 7,
-    val latestVersionName: String = "1.0.6",
-    val minRequiredVersionCode: Int = 1,
-    val isUpdateAvailable: Boolean = false,
-    val isForceUpdate: Boolean = false,
-    val releaseNotes: String = "",
-    val downloadUrl: String = "",
+    val versionCode: Int = 8,
+    val versionName: String = "1.0.7",
+    val apkUrl: String = "",
+    val updateMessage: String = "",
+    val isForced: Boolean = false,
+    val minSupportedVersionCode: Int = 1,
+    val sha256: String = "",
     val apkSizeBytes: Long = 0L,
-    val releaseDate: String = ""
+    val releaseDate: String = "",
+    val isUpdateAvailable: Boolean = false,
+    val latestVersionCode: Int = versionCode,
+    val latestVersionName: String = versionName,
+    val minRequiredVersionCode: Int = minSupportedVersionCode,
+    val isForceUpdate: Boolean = isForced,
+    val releaseNotes: String = updateMessage,
+    val downloadUrl: String = apkUrl
 )
+
+typealias UpdateInfo = AppUpdateInfo
+
 
 // Extension function to convert English digits to Persian digits
 fun String.toPersianDigits(): String {
@@ -324,3 +340,59 @@ fun String.toPersianDigits(): String {
 
 fun Int.toPersianDigits(): String = this.toString().toPersianDigits()
 fun Long.toPersianDigits(): String = this.toString().toPersianDigits()
+
+fun normalizePersianText(text: String): String {
+    return text
+        .replace('ي', 'ی')
+        .replace('ك', 'ک')
+        .replace('آ', 'ا')
+        .replace('أ', 'ا')
+        .replace('إ', 'ا')
+        .replace("‌", " ")
+        .replace("(", "")
+        .replace(")", "")
+        .replace("  ", " ")
+        .trim()
+        .lowercase()
+}
+
+/**
+ * Intelligent Persian search matching for students:
+ * Matches first name, last name, full name, with or without spaces,
+ * student code, national ID, or class name.
+ */
+fun Student.matchesQuery(query: String): Boolean {
+    val q = query.trim()
+    if (q.isBlank()) return true
+    val normQ = normalizePersianText(q)
+    val normQNoSpace = normQ.replace(" ", "")
+    val normFirst = normalizePersianText(firstName)
+    val normLast = normalizePersianText(lastName)
+    val normFull = normalizePersianText(fullName)
+    val normFullNoSpace = normFull.replace(" ", "")
+    val cleanCode = studentCode.trim()
+    val cleanNatId = nationalId.trim()
+    val cleanClass = normalizePersianText(className)
+
+    if (normFull.contains(normQ) ||
+        normFullNoSpace.contains(normQNoSpace) ||
+        normLast.contains(normQ) ||
+        normFirst.contains(normQ) ||
+        normFirst.contains(normQNoSpace) ||
+        normLast.contains(normQNoSpace) ||
+        cleanCode.contains(q) ||
+        cleanNatId.contains(q) ||
+        cleanClass.contains(normQ)) {
+        return true
+    }
+
+    // Support searching when query has multiple tokens (e.g. "فاریابی ابوالفضل" or "محمد ارشادی")
+    val tokens = normQ.split(" ").filter { it.isNotBlank() }
+    if (tokens.size > 1 && tokens.all { token ->
+        normFull.contains(token) || normFullNoSpace.contains(token) || cleanCode.contains(token) || normLast.contains(token) || normFirst.contains(token)
+    }) {
+        return true
+    }
+
+    return false
+}

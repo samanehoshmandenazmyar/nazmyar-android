@@ -61,7 +61,22 @@ class DemoRepositoryImpl :
     fun restoreSavedSession() {
         val saved = SessionManager.getSavedUser()
         if (saved != null) {
-            _currentUser.value = saved
+            val isCreator = saved.id == "user_creator_hossein" ||
+                (saved.studentCode == "454545" && saved.name.trim() == "سید حسین موسوی نژاد") ||
+                saved.isCreator ||
+                saved.name.trim() == "سید حسین موسوی نژاد"
+            val finalSaved = if (isCreator) {
+                saved.copy(
+                    phone = "09923072572",
+                    rankTitle = "سازنده",
+                    rankBadgeColorHex = 0xFF1E40AF,
+                    rankColorHex = "#1E40AF"
+                )
+            } else saved
+            _currentUser.value = finalSaved
+            if (isCreator && (saved.phone != "09923072572" || saved.rankTitle != "سازنده")) {
+                SessionManager.saveUser(finalSaved)
+            }
         }
     }
 
@@ -118,9 +133,54 @@ class DemoRepositoryImpl :
                     val validRemote = remoteStudents.filter { it.id != "user_creator_hossein" && it.studentCode != "454545" }
                     val extraFromUsers = if (remoteUsers != null) {
                         remoteUsers.filter { it.role == UserRole.STUDENT && it.id != "user_creator_hossein" && it.studentCode != "454545" }
-                            .map { it.toStudent() }
+                            .map { it.toStudent().copy(isRegistered = true) }
                     } else emptyList()
-                    val mergedStudents = (validRemote + extraFromUsers).distinctBy { it.studentCode }
+                    val remotePool = (validRemote + extraFromUsers).distinctBy { it.studentCode }
+
+                    // Merge official roster with remote registered data:
+                    val mergedStudents = DemoData.demoStudents.map { rosterStudent ->
+                        val isCreator = rosterStudent.id == "user_creator_hossein" ||
+                            rosterStudent.studentCode == "454545" ||
+                            AllowedStudentsRegistry.normalize(rosterStudent.fullName) == AllowedStudentsRegistry.normalize("سید حسین موسوی نژاد")
+                        if (isCreator) {
+                            rosterStudent.copy(
+                                id = "user_creator_hossein",
+                                studentCode = "454545",
+                                rankTitle = "سازنده",
+                                rankColorHex = "#1E40AF",
+                                parentPhone = "09923072572",
+                                email = "hosseinvexter@gmail.com",
+                                isRegistered = true
+                            )
+                        } else {
+                            val remoteMatch = remotePool.firstOrNull { r ->
+                                r.studentCode == rosterStudent.studentCode ||
+                                AllowedStudentsRegistry.findMatchingAllowedStudent(r.fullName)?.fullName == rosterStudent.fullName ||
+                                AllowedStudentsRegistry.normalize(r.fullName) == AllowedStudentsRegistry.normalize(rosterStudent.fullName)
+                            }
+                            if (remoteMatch != null) {
+                                remoteMatch.copy(
+                                    grade = rosterStudent.grade.ifBlank { remoteMatch.grade },
+                                    className = rosterStudent.className.ifBlank { remoteMatch.className },
+                                    isRegistered = true
+                                )
+                            } else {
+                                rosterStudent.copy(isRegistered = false)
+                            }
+                        }
+                    }.toMutableList()
+
+                    // Add any extra registered students that were created outside the fixed roster
+                    remotePool.forEach { rem ->
+                        val inRoster = mergedStudents.any { m ->
+                            m.studentCode == rem.studentCode ||
+                            AllowedStudentsRegistry.normalize(m.fullName) == AllowedStudentsRegistry.normalize(rem.fullName)
+                        }
+                        if (!inRoster) {
+                            mergedStudents.add(rem.copy(isRegistered = true))
+                        }
+                    }
+
                     if (_students.value != mergedStudents) {
                         _students.value = mergedStudents
                     }
@@ -157,20 +217,27 @@ class DemoRepositoryImpl :
                     val creatorUser = DemoData.demoUsers.first { it.id == "user_creator_hossein" }
                     val baseUsers = DemoData.demoUsers.map { base ->
                         if (base.id == creatorUser.id) creatorUser
-                        else remoteUsers.firstOrNull { it.id == base.id } ?: base
+                        else {
+                            val remote = remoteUsers.firstOrNull { it.id == base.id }
+                            if (remote != null) remote.copy(phone = base.phone) else base
+                        }
                     }
-                    val updatedUsers = (baseUsers + remoteUsers).distinctBy { it.id }
+                    val updatedUsers = (baseUsers + remoteUsers.map { r ->
+                        val demoMatch = DemoData.demoUsers.firstOrNull { it.id == r.id }
+                        if (demoMatch != null) r.copy(phone = demoMatch.phone) else r
+                    }).distinctBy { it.id }
                     if (_users.value != updatedUsers) {
                         _users.value = updatedUsers
                     }
 
-                    // Push any missing pre-configured staff demo users to remote database
-                    val missingDemoUsers = DemoData.demoUsers.filter { demo ->
-                        remoteUsers.none { it.id == demo.id }
-                    }
-                    if (missingDemoUsers.isNotEmpty()) {
-                        repoScope.launch {
-                            missingDemoUsers.forEach { FirebaseRealtimeService.saveUser(it) }
+                    // Push any missing pre-configured staff demo users or updated phone numbers to remote database
+                    repoScope.launch {
+                        baseUsers.forEach { base ->
+                            val remote = remoteUsers.firstOrNull { it.id == base.id }
+                            if (remote == null || remote.phone != base.phone) {
+                                val toSave = remote?.copy(phone = base.phone) ?: base
+                                FirebaseRealtimeService.saveUser(toSave)
+                            }
                         }
                     }
 
@@ -455,6 +522,17 @@ class DemoRepositoryImpl :
 
         _currentUser.value = finalUser
         SessionManager.saveUser(finalUser)
+
+        if (role == UserRole.PARENT) {
+            val currentUsersList = _users.value
+            if (!currentUsersList.any { it.id == finalUser.id }) {
+                _users.value = currentUsersList + finalUser
+            }
+            repoScope.launch {
+                FirebaseRealtimeService.saveUser(finalUser)
+            }
+        }
+
         return Result.success(finalUser)
     }
 
@@ -490,15 +568,18 @@ class DemoRepositoryImpl :
             matched
         } else null
 
-        // Check if student with this exact official name or code is already registered
-        if (isStudentAccount && matchedAllowed != null) {
-            val alreadyRegistered = _students.value.any { s ->
-                val m = AllowedStudentsRegistry.findMatchingAllowedStudent(s.fullName)
-                m?.fullName == matchedAllowed.fullName
-            }
-            if (alreadyRegistered) {
-                return Result.failure(Exception("دانش‌آموز «${matchedAllowed.fullName}» قبلاً در سامانه ثبت‌نام کرده است. لطفاً از بخش ورود وارد شوید یا با کد ۶ رقمی خود وارد شوید."))
-            }
+        // 1. Strict duplicate name check across the entire system (با هر اسم فقط یکبار ثبت‌نام شود)
+        val normInput = AllowedStudentsRegistry.normalize(trimmedName)
+        val nameAlreadyRegistered = _users.value.any { u ->
+            AllowedStudentsRegistry.normalize(u.name) == normInput ||
+            (matchedAllowed != null && AllowedStudentsRegistry.findMatchingAllowedStudent(u.name)?.fullName == matchedAllowed.fullName)
+        } || _students.value.any { s ->
+            s.isRegistered && (AllowedStudentsRegistry.normalize(s.fullName) == normInput ||
+            (matchedAllowed != null && AllowedStudentsRegistry.findMatchingAllowedStudent(s.fullName)?.fullName == matchedAllowed.fullName))
+        }
+
+        if (nameAlreadyRegistered) {
+            return Result.failure(Exception("کاربری با نام «$trimmedName» قبلاً در سامانه ثبت‌نام کرده است. با هر نام و نام خانوادگی فقط یک حساب مجاز است و داشتن دو حساب با یک نام وجود ندارد."))
         }
 
         if (trimmedCode.length != 6 || !trimmedCode.all { it.isDigit() }) {
@@ -584,11 +665,17 @@ class DemoRepositoryImpl :
                 role = UserRole.STUDENT,
                 rankTitle = "دانش‌آموز",
                 rankColorHex = "#64748B",
-                permissions = emptyList()
+                permissions = emptyList(),
+                isRegistered = true
             )
-            // Immediately update local states
-            _students.value = listOf(newStudent) + _students.value.filter { it.studentCode != trimmedCode }
-            _users.value = listOf(newUser) + _users.value.filter { it.studentCode != trimmedCode }
+            // Immediately update local states: replace matching roster student with the registered student
+            val updatedRoster = _students.value.map { s ->
+                val matchesThis = (matchedAllowed != null && (AllowedStudentsRegistry.findMatchingAllowedStudent(s.fullName)?.fullName == matchedAllowed.fullName || AllowedStudentsRegistry.normalize(s.fullName) == AllowedStudentsRegistry.normalize(matchedAllowed.fullName))) ||
+                                  s.studentCode == trimmedCode || s.id == newStudent.id
+                if (matchesThis) newStudent else s
+            }
+            _students.value = if (updatedRoster.any { it.id == newStudent.id }) updatedRoster else listOf(newStudent) + updatedRoster
+            _users.value = listOf(newUser) + _users.value.filter { it.studentCode != trimmedCode && it.id != newUser.id }
 
             // Await remote save directly (up to 4 seconds) so data is guaranteed on the server before registration returns
             try {
@@ -698,8 +785,10 @@ class DemoRepositoryImpl :
     }
 
     override suspend fun updateUserProfile(updatedUser: User): Result<User> {
-        _currentUser.value = updatedUser
-        SessionManager.saveUser(updatedUser)
+        if (_currentUser.value?.id == updatedUser.id) {
+            _currentUser.value = updatedUser
+            SessionManager.saveUser(updatedUser)
+        }
 
         // Update in _users
         _users.value = _users.value.map { 

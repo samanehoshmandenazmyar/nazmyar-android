@@ -83,6 +83,7 @@ import androidx.compose.runtime.mutableStateListOf
 import com.example.domain.model.CustomRank
 import com.example.domain.model.RankPermission
 import com.example.domain.model.Student
+import com.example.domain.model.matchesQuery
 import com.example.domain.model.toPersianDigits
 import com.example.presentation.components.RgbColorMixerDialog
 import com.example.presentation.components.RgbRankBadge
@@ -190,11 +191,7 @@ fun RankManagementScreen(
     // Filter students
     val filteredStudents = remember(students, searchQuery) {
         if (searchQuery.isBlank()) students
-        else students.filter {
-            it.fullName.contains(searchQuery, ignoreCase = true) ||
-                it.studentCode.contains(searchQuery) ||
-                it.className.contains(searchQuery, ignoreCase = true)
-        }
+        else students.filter { it.matchesQuery(searchQuery) }
     }
 
     val presetColors = listOf(
@@ -246,21 +243,11 @@ fun RankManagementScreen(
                 Spacer(modifier = Modifier.width(6.dp))
 
                 Column(modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = "مدیریت رنک‌ها و اختیارات",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        RgbRankBadge(text = "پنل سازنده", isSmall = true)
-                    }
                     Text(
-                        text = "بخش اختصاصی کاربر: ${currentUser?.name ?: "سید حسین موسوی نژاد"} (hosseinvexter@gmail.com)",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color(0xFF15803D),
-                        fontWeight = FontWeight.Bold
+                        text = "مدیریت رنک‌ها",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 }
             }
@@ -284,7 +271,7 @@ fun RankManagementScreen(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "دانش‌آموزان (${students.size.toPersianDigits()})",
+                            text = "مخاطب‌ها (${students.size.toPersianDigits()})",
                             fontWeight = FontWeight.Bold
                         )
                     }
@@ -492,8 +479,242 @@ fun RankManagementScreen(
             }
         }
 
-        // TAB 1: SAVED RANKS LIBRARY
+        // TAB 1: STAFF & ADMINISTRATORS
         if (selectedTab == 1) {
+            val filteredStaff = remember(staffUsers, staffSearchQuery) {
+                if (staffSearchQuery.isBlank()) staffUsers
+                else staffUsers.filter {
+                    it.name.contains(staffSearchQuery, ignoreCase = true) ||
+                        it.tag?.contains(staffSearchQuery, ignoreCase = true) == true ||
+                        it.phone.contains(staffSearchQuery) ||
+                        it.studentCode.contains(staffSearchQuery)
+                }
+            }
+
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Search box
+                OutlinedTextField(
+                    value = staffSearchQuery,
+                    onValueChange = { staffSearchQuery = it },
+                    placeholder = { Text("جستجو در بین کادر مدرسه (مدیر، معاون، دبیر)...") },
+                    leadingIcon = {
+                        Icon(Icons.Default.Search, contentDescription = null, tint = SchoolBluePrimary)
+                    },
+                    singleLine = true,
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 10.dp)
+                        .testTag("rank_staff_search_input")
+                )
+
+                // Info banner explaining that staff members initially have no rank/permissions and creator assigns them
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFEFF6FF)),
+                    border = BorderStroke(1.dp, Color(0xFFBFDBFE))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Security,
+                            contentDescription = null,
+                            tint = SchoolBluePrimary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "مدیریت رنک‌ها و سطوح دسترسی کادر اجرایی مدرسه.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF1E3A8A)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                if (filteredStaff.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "کاربری در کادر مدرسه یافت نشد.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        items(filteredStaff, key = { it.id }) { staff ->
+                            Card(
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("staff_card_${staff.id}")
+                            ) {
+                                Column(modifier = Modifier.padding(14.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(46.dp)
+                                                    .clip(CircleShape)
+                                                    .background(
+                                                        if (staff.isCreator) Color(0xFF1E40AF).copy(alpha = 0.2f)
+                                                        else SchoolBluePrimary.copy(alpha = 0.12f)
+                                                    ),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    imageVector = if (staff.isCreator) Icons.Default.Security
+                                                    else Icons.Default.Badge,
+                                                    contentDescription = null,
+                                                    tint = if (staff.isCreator) Color(0xFF1E40AF) else SchoolBluePrimary,
+                                                    modifier = Modifier.size(24.dp)
+                                                )
+                                            }
+
+                                            Spacer(modifier = Modifier.width(10.dp))
+
+                                            Column {
+                                                Text(
+                                                    text = staff.name,
+                                                    style = MaterialTheme.typography.titleMedium,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                                Text(
+                                                    text = "${staff.tag ?: staff.role.farsiTitle} | کد: ${staff.studentCode.toPersianDigits()} | تلفن: ${staff.phone.toPersianDigits()}",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                        }
+
+                                        // Current Rank or "بدون رنک"
+                                        if (staff.rankTitle.isNotBlank()) {
+                                            StudentRankBadge(
+                                                rankTitle = staff.rankTitle,
+                                                rankColorHex = staff.rankColorHex,
+                                                isLarge = false
+                                            )
+                                        } else {
+                                            Surface(
+                                                shape = RoundedCornerShape(8.dp),
+                                                color = Color(0xFFF1F5F9),
+                                                border = BorderStroke(0.5.dp, Color(0xFFCBD5E1))
+                                            ) {
+                                                Text(
+                                                    text = "بدون رنک",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = Color(0xFF64748B),
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(8.dp))
+
+                                    // Display permissions or no permissions indicator
+                                    if (staff.permissions.isNotEmpty()) {
+                                        FlowRow(
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            staff.permissions.forEach { perm ->
+                                                val label = when (perm) {
+                                                    RankPermission.REGISTER_POSITIVE -> "ثبت تشویقی"
+                                                    RankPermission.REGISTER_DISCIPLINARY -> "ثبت گزارش"
+                                                    RankPermission.VIEW_REPORTS -> "مشاهده آمار"
+                                                    RankPermission.ACCESS_GAMES -> "بازی شطرنج"
+                                                    RankPermission.VIEW_STUDENT_PROFILES -> "پرونده دانش‌آموزان"
+                                                    RankPermission.EDIT_CLASS_INFO -> "همیار کلاس"
+                                                    RankPermission.SPECIAL_BADGE -> "نشان ویژه"
+                                                    else -> perm
+                                                }
+                                                Surface(
+                                                    shape = RoundedCornerShape(6.dp),
+                                                    color = Color(0xFFEFF6FF),
+                                                    border = BorderStroke(0.5.dp, Color(0xFFBFDBFE))
+                                                ) {
+                                                    Text(
+                                                        text = "✦ $label",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = Color(0xFF1E40AF),
+                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        Text(
+                                            text = "⚠️ بدون دسترسی اجرایی (نیاز به تخصیص اختیارات)",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color(0xFFB45309),
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.height(10.dp))
+
+                                    // Button to assign rank & permissions
+                                    Button(
+                                        onClick = { userForRankAssignment = staff },
+                                        shape = RoundedCornerShape(10.dp),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = if (staff.permissions.isEmpty()) Color(0xFF2563EB) else SchoolBluePrimary
+                                        ),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(40.dp)
+                                            .testTag("assign_rank_staff_btn_${staff.id}")
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Edit,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = if (staff.permissions.isEmpty()) "تعیین رنک و اعطای دسترسی به این کاربر" else "ویرایش رنک و دسترسی‌های این کاربر",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.sp
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        item { Spacer(modifier = Modifier.height(24.dp)) }
+                    }
+                }
+            }
+        }
+
+        // TAB 2: SAVED RANKS LIBRARY
+        if (selectedTab == 2) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -1138,6 +1359,250 @@ fun RankManagementScreen(
         }
     }
 
+    // DIALOG: ASSIGN RANK & PERMISSIONS TO STAFF MEMBER
+    userForRankAssignment?.let { targetUser ->
+        var rankNameInput by remember { mutableStateOf(targetUser.rankTitle) }
+        var rankColorInput by remember { mutableStateOf(if (targetUser.rankColorHex.isNotBlank()) targetUser.rankColorHex else "#2563EB") }
+        var selectedPermissions by remember { mutableStateOf(targetUser.permissions.toSet()) }
+
+        val staffExtraRanks = remember { mutableStateListOf<String>().apply { addAll(targetUser.extraRanks) } }
+        val staffExtraColors = remember { mutableStateListOf<String>().apply { addAll(targetUser.extraRankColors) } }
+        var showRgbMixerForStaffPrimary by remember { mutableStateOf(false) }
+
+        AlertDialog(
+            onDismissRequest = { userForRankAssignment = null },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Security,
+                        contentDescription = null,
+                        tint = SchoolBluePrimary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "تعیین رنک و دسترسی‌های ${targetUser.name}",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    // Quick Pick from Saved Ranks
+                    Text(
+                        text = "انتخاب سریع از رنک‌های آماده:",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        customRanks.forEach { rank ->
+                            FilterChip(
+                                selected = rankNameInput == rank.title && rankColorInput == rank.colorHex,
+                                onClick = {
+                                    rankNameInput = rank.title
+                                    rankColorInput = rank.colorHex
+                                    selectedPermissions = rank.permissions.toSet()
+                                },
+                                label = {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        val c = try {
+                                            Color(android.graphics.Color.parseColor(if (rank.colorHex.startsWith("#")) rank.colorHex else "#${rank.colorHex}"))
+                                        } catch (_: Exception) {
+                                            Color(0xFF64748B)
+                                        }
+                                        Box(
+                                            modifier = Modifier
+                                                .size(10.dp)
+                                                .clip(CircleShape)
+                                                .background(c)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(text = rank.title, fontSize = 12.sp)
+                                    }
+                                }
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Text(
+                        text = "مشخصات رنک:",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedTextField(
+                        value = rankNameInput,
+                        onValueChange = { rankNameInput = it },
+                        label = { Text("عنوان رنک (مثال: مدیر ارشد، معاون پرورشی، ناظم)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        text = "رنگ نشان رنک:",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        presetColors.forEach { (cHex, _) ->
+                            val c = Color(android.graphics.Color.parseColor(cHex))
+                            val isSelected = rankColorInput.equals(cHex, ignoreCase = true)
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .clip(CircleShape)
+                                    .background(c)
+                                    .border(
+                                        width = if (isSelected) 3.dp else 1.dp,
+                                        color = if (isSelected) Color.Black else Color.White,
+                                        shape = CircleShape
+                                    )
+                                    .clickable { rankColorInput = cHex }
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Button(
+                        onClick = { showRgbMixerForStaffPrimary = true },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F172A)),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth().height(36.dp)
+                    ) {
+                        Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(text = "پالت و ترکیب رنگ دستی RGB", fontSize = 12.sp)
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Text(
+                        text = "سطوح دسترسی و اختیارات اجرایی این کاربر:",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    RankPermission.all.forEach { (permKey, permDesc) ->
+                        val isChecked = selectedPermissions.contains(permKey)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    selectedPermissions = if (isChecked) selectedPermissions - permKey else selectedPermissions + permKey
+                                }
+                                .padding(vertical = 4.dp)
+                        ) {
+                            Checkbox(
+                                checked = isChecked,
+                                onCheckedChange = { checked ->
+                                    selectedPermissions = if (checked) selectedPermissions + permKey else selectedPermissions - permKey
+                                },
+                                colors = CheckboxDefaults.colors(checkedColor = SchoolBluePrimary)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(text = permDesc, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Preview
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = Color(0xFFF8FAFC),
+                        border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "پیش‌نمایش رنک کادر:",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            StudentRankBadge(
+                                rankTitle = rankNameInput.ifBlank { "پیش‌نمایش" },
+                                rankColorHex = rankColorInput,
+                                isLarge = true
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val finalTitle = rankNameInput.trim()
+                        val finalColor = rankColorInput.trim().ifBlank { "#2563EB" }
+                        val finalPerms = selectedPermissions.toList()
+
+                        mainViewModel.assignMultipleRanksToStudent(
+                            studentId = targetUser.id,
+                            ranks = if (finalTitle.isNotBlank()) listOf(finalTitle) + staffExtraRanks.toList() else emptyList(),
+                            colors = if (finalTitle.isNotBlank()) listOf(finalColor) + staffExtraColors.toList() else emptyList(),
+                            permissions = finalPerms
+                        )
+
+                        userForRankAssignment = null
+                        successCelebrationInfo = RankCelebrationData(
+                            studentName = targetUser.name,
+                            rankTitle = finalTitle.ifBlank { "دسترسی‌های کادر" },
+                            colorHex = finalColor,
+                            permissions = finalPerms
+                        )
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = SchoolBluePrimary),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.testTag("confirm_assign_staff_rank_button")
+                ) {
+                    Text(text = "اعمال و ذخیره دسترسی‌ها", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { userForRankAssignment = null }) {
+                    Text("انصراف")
+                }
+            }
+        )
+
+        if (showRgbMixerForStaffPrimary) {
+            RgbColorMixerDialog(
+                initialColorHex = rankColorInput,
+                onColorSelected = {
+                    rankColorInput = it
+                    showRgbMixerForStaffPrimary = false
+                },
+                onDismiss = { showRgbMixerForStaffPrimary = false }
+            )
+        }
+    }
+
     // DIALOG: CREATE NEW REUSABLE CUSTOM RANK
     if (showCreateRankDialog) {
         var newTitle by remember { mutableStateOf("") }
@@ -1340,11 +1805,7 @@ fun RankManagementScreen(
         var studentSearch by remember { mutableStateOf("") }
         val selectableStudents = remember(students, studentSearch) {
             if (studentSearch.isBlank()) students
-            else students.filter {
-                it.fullName.contains(studentSearch, ignoreCase = true) ||
-                    it.studentCode.contains(studentSearch) ||
-                    it.className.contains(studentSearch, ignoreCase = true)
-            }
+            else students.filter { it.matchesQuery(studentSearch) }
         }
 
         AlertDialog(

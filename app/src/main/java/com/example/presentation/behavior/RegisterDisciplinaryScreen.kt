@@ -18,10 +18,13 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Report
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -72,11 +75,13 @@ fun RegisterDisciplinaryScreen(
     onBackClick: () -> Unit
 ) {
     val currentUser by authViewModel.currentUser.collectAsState()
+    val allStudents by mainViewModel.allStudents.collectAsState()
     val students by mainViewModel.students.collectAsState()
+    val effectiveStudents = if (allStudents.isNotEmpty()) allStudents else students
     val operationState by mainViewModel.operationState.collectAsState()
 
     var selectedStudentId by remember {
-        mutableStateOf(initialStudentId ?: mainViewModel.discStudentId.value.ifBlank { students.firstOrNull()?.id ?: "" })
+        mutableStateOf(initialStudentId ?: mainViewModel.discStudentId.value.ifBlank { effectiveStudents.firstOrNull()?.id ?: "" })
     }
     var isStudentDropdownExpanded by remember { mutableStateOf(false) }
 
@@ -100,7 +105,7 @@ fun RegisterDisciplinaryScreen(
     var notifyParent by remember { mutableStateOf(true) }
     var showConfirmDialog by remember { mutableStateOf(false) }
 
-    val currentStudent = students.firstOrNull { it.id == selectedStudentId }
+    val currentStudent = effectiveStudents.firstOrNull { it.id == selectedStudentId }
 
     val currentDate = remember { DateTimeUtils.getCurrentPersianDate() }
     val currentTime = remember { DateTimeUtils.getCurrentTime() }
@@ -157,43 +162,46 @@ fun RegisterDisciplinaryScreen(
                     )
                     Spacer(modifier = Modifier.height(6.dp))
 
-                    ExposedDropdownMenuBox(
-                        expanded = isStudentDropdownExpanded,
-                        onExpandedChange = { isStudentDropdownExpanded = it }
-                    ) {
-                        OutlinedTextField(
-                            value = currentStudent?.let { "${it.fullName} (${it.grade} - ${it.className})" } ?: "انتخاب دانش‌آموز",
-                            onValueChange = {},
-                            readOnly = true,
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = isStudentDropdownExpanded) },
-                            modifier = Modifier
-                                .menuAnchor()
-                                .fillMaxWidth()
-                                .testTag("select_disc_student_dropdown"),
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                        ExposedDropdownMenu(
-                            expanded = isStudentDropdownExpanded,
-                            onDismissRequest = { isStudentDropdownExpanded = false }
-                        ) {
-                            if (students.isEmpty()) {
-                                DropdownMenuItem(
-                                    text = { Text("هیچ دانش‌آموزی ثبت نشده است (ابتدا در بخش دانش‌آموزان ثبت کنید)") },
-                                    onClick = { isStudentDropdownExpanded = false }
+                    var showStudentPicker by remember { mutableStateOf(false) }
+
+                    OutlinedTextField(
+                        value = currentStudent?.let { "${it.fullName} (${it.grade} - ${it.className})" } ?: "برای جستجو و انتخاب دانش‌آموز کلیک کنید...",
+                        onValueChange = {},
+                        readOnly = true,
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.Search,
+                                contentDescription = "جستجو",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        },
+                        trailingIcon = {
+                            IconButton(onClick = { showStudentPicker = true }) {
+                                Icon(
+                                    Icons.Default.ArrowDropDown,
+                                    contentDescription = "انتخاب دانش‌آموز"
                                 )
-                            } else {
-                                students.forEach { s ->
-                                    DropdownMenuItem(
-                                        text = { Text("${s.fullName} - ${s.className} (${s.studentCode.toPersianDigits()})") },
-                                        onClick = {
-                                            selectedStudentId = s.id
-                                            mainViewModel.discStudentId.value = s.id
-                                            isStudentDropdownExpanded = false
-                                        }
-                                    )
-                                }
                             }
-                        }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showStudentPicker = true }
+                            .testTag("select_disc_student_dropdown"),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+
+                    if (showStudentPicker) {
+                        com.example.presentation.components.SearchableStudentPickerDialog(
+                            students = effectiveStudents,
+                            selectedStudentId = selectedStudentId,
+                            title = "انتخاب و جستجوی دانش‌آموز جهت ثبت تخلف",
+                            onSelectStudent = { s ->
+                                selectedStudentId = s.id
+                                mainViewModel.discStudentId.value = s.id
+                                showStudentPicker = false
+                            },
+                            onDismiss = { showStudentPicker = false }
+                        )
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))

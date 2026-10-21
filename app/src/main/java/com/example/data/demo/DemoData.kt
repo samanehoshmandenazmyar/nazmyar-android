@@ -6,6 +6,7 @@ import com.example.domain.model.SchoolClass
 import com.example.domain.model.Student
 import com.example.domain.model.User
 import com.example.domain.model.UserRole
+import com.example.domain.model.RankPermission
 
 object DemoData {
 
@@ -18,7 +19,7 @@ object DemoData {
         User(
             id = "user_creator_hossein",
             name = "سید حسین موسوی نژاد",
-            phone = "09120000000",
+            phone = "09923072572",
             email = "hosseinvexter@gmail.com",
             role = UserRole.MANAGER,
             schoolId = DEFAULT_SCHOOL_ID,
@@ -27,12 +28,21 @@ object DemoData {
             password = CREATOR_PASSWORD,
             rankTitle = "سازنده",
             rankBadgeColorHex = 0xFF1E40AF,
-            rankColorHex = "#1E40AF"
+            rankColorHex = "#1E40AF",
+            permissions = listOf(
+                RankPermission.REGISTER_POSITIVE,
+                RankPermission.REGISTER_DISCIPLINARY,
+                RankPermission.VIEW_REPORTS,
+                RankPermission.ACCESS_GAMES,
+                RankPermission.VIEW_STUDENT_PROFILES,
+                RankPermission.EDIT_CLASS_INFO,
+                RankPermission.SPECIAL_BADGE
+            )
         ),
         User(
             id = "user_manager_mehdi_faryabi",
             name = "مهدی فاریابی",
-            phone = "09170000001",
+            phone = "09164237120",
             email = "mehdi.faryabi@school.ir",
             role = UserRole.MANAGER,
             schoolId = DEFAULT_SCHOOL_ID,
@@ -49,7 +59,7 @@ object DemoData {
         User(
             id = "user_counselor_yasin_dorahaki",
             name = "یاسین دراهکی",
-            phone = "09170000002",
+            phone = "09172738837",
             email = "yasin.dorahaki@school.ir",
             role = UserRole.COUNSELOR,
             schoolId = DEFAULT_SCHOOL_ID,
@@ -65,8 +75,41 @@ object DemoData {
         )
     )
 
-    // Completely empty student and record data sets until registered
-    val demoStudents: List<Student> = emptyList()
+    // All official students from school roster added to contacts list
+    val demoStudents: List<Student> = AllowedStudentsRegistry.allAllowedStudents.mapIndexed { index, entry ->
+        val isCreator = (entry.fullName == "سید حسین موسوی نژاد") ||
+            (entry.firstName == "سید حسین" && entry.lastName == "موسوی نژاد") ||
+            AllowedStudentsRegistry.normalize(entry.fullName) == AllowedStudentsRegistry.normalize("سید حسین موسوی نژاد")
+        val codeNum = if (isCreator) "454545" else (100001 + index).toString()
+        Student(
+            id = if (isCreator) "user_creator_hossein" else "std_roster_${index + 1}",
+            firstName = entry.firstName,
+            lastName = entry.lastName,
+            studentCode = codeNum,
+            nationalId = if (isCreator) "454545" else "",
+            grade = entry.grade,
+            className = entry.className,
+            gender = "پسر",
+            birthDate = "۱۳۸۹/۰۴/۱۵",
+            parentName = "ولی ${entry.lastName}",
+            parentPhone = if (isCreator) "09923072572" else "",
+            email = if (isCreator) "hosseinvexter@gmail.com" else "",
+            schoolId = DEFAULT_SCHOOL_ID,
+            score = 100,
+            rankTitle = if (isCreator) "سازنده" else "دانش‌آموز",
+            rankColorHex = if (isCreator) "#1E40AF" else "#64748B",
+            permissions = if (isCreator) listOf(
+                RankPermission.REGISTER_POSITIVE,
+                RankPermission.REGISTER_DISCIPLINARY,
+                RankPermission.VIEW_REPORTS,
+                RankPermission.ACCESS_GAMES,
+                RankPermission.VIEW_STUDENT_PROFILES,
+                RankPermission.EDIT_CLASS_INFO,
+                RankPermission.SPECIAL_BADGE
+            ) else emptyList(),
+            isRegistered = isCreator
+        )
+    }
     val demoClasses: List<SchoolClass> = listOf(
         SchoolClass(
             id = "class_7_1",

@@ -74,6 +74,11 @@ import com.example.ui.theme.SchoolBluePrimary
 import com.example.ui.theme.WarningAmber
 import com.example.ui.theme.WarningAmberContainer
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.material.icons.filled.Assignment
+import com.example.domain.model.RankPermission
+import com.example.ui.theme.VazirmatnFontFamily
+
 @Composable
 fun StudentProfileScreen(
     studentId: String,
@@ -81,7 +86,8 @@ fun StudentProfileScreen(
     authViewModel: AuthViewModel,
     onBackClick: () -> Unit,
     onRegisterPositive: (String) -> Unit,
-    onRegisterDisciplinary: (String) -> Unit
+    onRegisterDisciplinary: (String) -> Unit,
+    onNavigateToDossier: (String) -> Unit = {}
 ) {
     val currentUser by authViewModel.currentUser.collectAsState()
     val allStudents by mainViewModel.students.collectAsState()
@@ -177,12 +183,12 @@ fun StudentProfileScreen(
                             modifier = Modifier
                                 .size(64.dp)
                                 .clip(CircleShape)
-                                .background(SchoolBluePrimary),
+                                .background(SchoolBlueContainer),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
                                 text = "${student.firstName.take(1)}${student.lastName.take(1)}",
-                                color = Color.White,
+                                color = SchoolBluePrimary,
                                 style = MaterialTheme.typography.headlineSmall,
                                 fontWeight = FontWeight.Bold
                             )
@@ -289,6 +295,35 @@ fun StudentProfileScreen(
                                 Icon(Icons.Default.Report, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text("ثبت مورد انضباطی", style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+
+                        val canViewDossier = currentUser?.isCreator == true ||
+                            currentUser?.role == UserRole.MANAGER ||
+                            currentUser?.role == UserRole.VICE_PRINCIPAL ||
+                            currentUser?.role == UserRole.TEACHER ||
+                            currentUser?.permissions?.contains(RankPermission.VIEW_STUDENT_PROFILES) == true
+
+                        if (canViewDossier) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            OutlinedButton(
+                                onClick = { onNavigateToDossier(student.id) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("view_student_monthly_dossier_button"),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = SchoolBluePrimary),
+                                border = BorderStroke(1.dp, SchoolBluePrimary.copy(alpha = 0.6f))
+                            ) {
+                                Icon(Icons.Default.Assignment, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "مشاهده فرم پرونده انضباطی ماهانه (تفکیک ماه‌های سال)",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontFamily = VazirmatnFontFamily,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                )
                             }
                         }
                     }

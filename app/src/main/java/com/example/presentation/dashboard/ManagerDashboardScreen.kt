@@ -76,6 +76,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.unit.sp
 import com.example.domain.model.RankPermission
+import com.example.domain.model.UserRole
+
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.LaunchedEffect
+import com.example.core.banner.BannerManager
+import com.example.presentation.components.HomeBannerCarousel
+import com.example.presentation.components.PtaElectionHomeBanner
 
 @Composable
 fun ManagerDashboardScreen(
@@ -88,8 +95,15 @@ fun ManagerDashboardScreen(
     onNavigateToNotifications: () -> Unit,
     onNavigateToRanks: () -> Unit = {},
     onNavigateToPublishUpdate: () -> Unit = {},
+    onNavigateToPtaVoting: () -> Unit = {},
+    onNavigateToBannerManagement: () -> Unit = {},
     onMenuClick: () -> Unit = {}
 ) {
+    val context = LocalContext.current
+    LaunchedEffect(Unit) {
+        BannerManager.init(context)
+    }
+    val allBanners by BannerManager.banners.collectAsState()
     val stats by mainViewModel.stats.collectAsState()
     val records by mainViewModel.records.collectAsState()
     val notifications by mainViewModel.notifications.collectAsState()
@@ -158,6 +172,24 @@ fun ManagerDashboardScreen(
             }
         }
 
+        // 16:9 Auto-sliding Home Banners Carousel
+        item {
+            HomeBannerCarousel(
+                banners = allBanners,
+                canManage = isCreator || user?.role == UserRole.MANAGER,
+                onManageClick = onNavigateToBannerManagement,
+                modifier = Modifier.padding(vertical = 4.dp)
+            )
+        }
+
+        // گزینه موقت: انتخاب انجمن و اولیا و مربیان
+        item {
+            PtaElectionHomeBanner(
+                onClick = onNavigateToPtaVoting,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+            )
+        }
+
         // Alert banner if account has no active permissions yet
         if (!isCreator && userPerms.isEmpty()) {
             item {
@@ -191,7 +223,7 @@ fun ManagerDashboardScreen(
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "در حال حاضر هیچ دسترسی یا رنکی به این حساب داده نشده است. سازنده و مالک سامانه (سید حسین موسوی نژاد) دسترسی‌ها و رنک مورد نظر را برای شما فعال خواهد کرد.",
+                                text = "در حال حاضر رنک یا دسترسی فعالی برای این حساب تعریف نشده است. جهت تخصیص اختیارات با مدیریت هماهنگ نمایید.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Color(0xFF78350F),
                                 lineHeight = 18.sp
@@ -226,7 +258,7 @@ fun ManagerDashboardScreen(
                         modifier = Modifier.weight(1f),
                         onClick = {
                             if (canRegisterPos) onNavigateToPositive()
-                            else permissionDeniedMessage = "شما مجوز «ثبت رفتار مثبت» را ندارید. لطفاً از سازنده سامانه درخواست فعال‌سازی دسترسی نمایید."
+                            else permissionDeniedMessage = "شما مجوز «ثبت رفتار مثبت» را ندارید."
                         },
                         tag = "quick_positive_btn"
                     )
@@ -239,7 +271,7 @@ fun ManagerDashboardScreen(
                         modifier = Modifier.weight(1f),
                         onClick = {
                             if (canRegisterDisc) onNavigateToDisciplinary()
-                            else permissionDeniedMessage = "شما مجوز «ثبت مورد انضباطی» را ندارید. لطفاً از سازنده سامانه درخواست فعال‌سازی دسترسی نمایید."
+                            else permissionDeniedMessage = "شما مجوز «ثبت مورد انضباطی» را ندارید."
                         },
                         tag = "quick_disciplinary_btn"
                     )
@@ -252,14 +284,14 @@ fun ManagerDashboardScreen(
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     QuickActionButton(
-                        title = "دانش‌آموزان",
+                        title = "مخاطب‌ها",
                         icon = Icons.Default.Group,
                         containerColor = SchoolBluePrimary,
                         contentColor = Color.White,
                         modifier = Modifier.weight(1f),
                         onClick = {
                             if (canViewStudents) onNavigateToStudents()
-                            else permissionDeniedMessage = "شما مجوز «مشاهده لیست دانش‌آموزان» را ندارید. لطفاً از سازنده سامانه درخواست فعال‌سازی دسترسی نمایید."
+                            else permissionDeniedMessage = "شما مجوز «مشاهده لیست مخاطب‌ها» را ندارید."
                         },
                         tag = "quick_students_btn"
                     )
@@ -272,7 +304,7 @@ fun ManagerDashboardScreen(
                         modifier = Modifier.weight(1f),
                         onClick = {
                             if (canViewReports) onNavigateToReports()
-                            else permissionDeniedMessage = "شما مجوز «مشاهده گزارش‌ها و آمار» را ندارید. لطفاً از سازنده سامانه درخواست فعال‌سازی دسترسی نمایید."
+                            else permissionDeniedMessage = "شما مجوز «مشاهده گزارش‌ها و آمار» را ندارید."
                         },
                         tag = "quick_reports_btn"
                     )
@@ -281,7 +313,7 @@ fun ManagerDashboardScreen(
                 if (user?.isCreator == true) {
                     Spacer(modifier = Modifier.height(8.dp))
                     QuickActionButton(
-                        title = "مدیریت رنک‌ها و سطوح دسترسی (بخش اختصاصی شما)",
+                        title = "مدیریت رنک‌ها",
                         icon = Icons.Default.Security,
                         containerColor = Color(0xFF7C3AED),
                         contentColor = Color.White,
@@ -292,7 +324,7 @@ fun ManagerDashboardScreen(
 
                     Spacer(modifier = Modifier.height(8.dp))
                     QuickActionButton(
-                        title = "آپلود و انتشار نسخه جدید برنامه (ارسال به تمام کلاینت‌ها)",
+                        title = "انتشار نسخه جدید",
                         icon = Icons.Default.CloudUpload,
                         containerColor = SchoolBluePrimary,
                         contentColor = Color.White,

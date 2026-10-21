@@ -745,68 +745,154 @@ object FirebaseRealtimeService {
     }
 
     suspend fun fetchAppUpdate(): com.example.domain.model.AppUpdateInfo? = withContext(Dispatchers.IO) {
-        executeWithFailover("fetchAppUpdate") { baseUrl ->
-            val request = Request.Builder()
-                .url(ServerConfig.appUpdateUrl(baseUrl))
-                .get()
-                .build()
-            client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return@executeWithFailover null
-                val body = response.body?.string() ?: return@executeWithFailover null
-                if (body.trim() == "null" || body.isBlank()) return@executeWithFailover null
-                val obj = JSONObject(body)
-                val latestCode = obj.optInt("latestVersionCode", BuildConfig.VERSION_CODE)
-                val latestName = obj.optString("latestVersionName", "1.0.2")
-                val minCode = obj.optInt("minRequiredVersionCode", 1)
-                val currentCode = BuildConfig.VERSION_CODE
-                val isAvailable = latestCode > currentCode
-                val isForce = isAvailable && (currentCode < minCode || obj.optBoolean("isForceUpdate", false))
+        val remote = executeWithFailover("fetchAppUpdate") { baseUrl ->
+            try {
+                val request = Request.Builder()
+                    .url(ServerConfig.appUpdateUrl(baseUrl))
+                    .get()
+                    .build()
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) return@executeWithFailover null
+                    val body = response.body?.string() ?: return@executeWithFailover null
+                    if (body.trim() == "null" || body.isBlank()) return@executeWithFailover null
 
-                com.example.domain.model.AppUpdateInfo(
-                    latestVersionCode = latestCode,
-                    latestVersionName = latestName,
-                    minRequiredVersionCode = minCode,
-                    isUpdateAvailable = isAvailable,
-                    isForceUpdate = isForce,
-                    releaseNotes = obj.optString("releaseNotes", "به‌روزرسانی امنیتی، رفع باگ‌ها و بهبود عملکرد سامانه"),
-                    downloadUrl = obj.optString("downloadUrl", "https://github.com/aistudio-nezamyar/releases/download/v$latestName/nezamyar-v$latestName.apk"),
-                    apkSizeBytes = obj.optLong("apkSizeBytes", 15_400_000L),
-                    releaseDate = obj.optString("releaseDate", "۱۴۰۳/۰۸/۰۱")
-                )
+                    val rawObj = JSONObject(body)
+                    // Support both root {"app_update": {...}} and direct /app_update.json {...}
+                    val obj = if (rawObj.has("app_update") && !rawObj.isNull("app_update")) {
+                        rawObj.optJSONObject("app_update") ?: rawObj
+                    } else {
+                        rawObj
+                    }
+
+                    val currentCode = BuildConfig.VERSION_CODE
+                    val vCode = when {
+                        obj.has("version_code") -> obj.optInt("version_code", currentCode)
+                        obj.has("latestVersionCode") -> obj.optInt("latestVersionCode", currentCode)
+                        else -> currentCode
+                    }
+                    val vName = when {
+                        obj.has("version_name") -> obj.optString("version_name", BuildConfig.VERSION_NAME)
+                        obj.has("latestVersionName") -> obj.optString("latestVersionName", BuildConfig.VERSION_NAME)
+                        else -> BuildConfig.VERSION_NAME
+                    }
+                    val minCode = when {
+                        obj.has("min_supported_version_code") -> obj.optInt("min_supported_version_code", 1)
+                        obj.has("minRequiredVersionCode") -> obj.optInt("minRequiredVersionCode", 1)
+                        else -> 1
+                    }
+                    val isForcedRaw = when {
+                        obj.has("is_forced") -> obj.optBoolean("is_forced", false)
+                        obj.has("isForceUpdate") -> obj.optBoolean("isForceUpdate", false)
+                        else -> false
+                    }
+                    val apkUrl = when {
+                        obj.has("apk_url") -> obj.optString("apk_url", "")
+                        obj.has("downloadUrl") -> obj.optString("downloadUrl", "")
+                        else -> ""
+                    }
+                    val updateMsg = when {
+                        obj.has("update_message") -> obj.optString("update_message", "")
+                        obj.has("releaseNotes") -> obj.optString("releaseNotes", "")
+                        else -> "به‌روزرسانی امنیتی، رفع باگ‌ها و بهبود عملکرد سامانه"
+                    }
+                    val sha256 = when {
+                        obj.has("sha256") -> obj.optString("sha256", "")
+                        obj.has("sha_256") -> obj.optString("sha_256", "")
+                        else -> ""
+                    }
+                    val sizeBytes = when {
+                        obj.has("apk_size_bytes") -> obj.optLong("apk_size_bytes", 0L)
+                        obj.has("apkSizeBytes") -> obj.optLong("apkSizeBytes", 0L)
+                        else -> 0L
+                    }
+                    val relDate = when {
+                        obj.has("release_date") -> obj.optString("release_date", "")
+                        obj.has("releaseDate") -> obj.optString("releaseDate", "")
+                        else -> ""
+                    }
+
+                    val isAvailable = vCode > currentCode
+                    val isForced = isAvailable && (isForcedRaw || currentCode < minCode)
+
+                    val info = com.example.domain.model.AppUpdateInfo(
+                        versionCode = vCode,
+                        versionName = vName,
+                        minSupportedVersionCode = minCode,
+                        isForced = isForced,
+                        apkUrl = apkUrl,
+                        updateMessage = updateMsg,
+                        sha256 = sha256,
+                        apkSizeBytes = sizeBytes,
+                        releaseDate = relDate,
+                        isUpdateAvailable = isAvailable
+                    )
+
+                    // Cache latest valid info locally
+                    com.example.core.session.SessionManager.saveLastKnownUpdate(info)
+                    info
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Error parsing app update from $baseUrl: ${e.message}")
+                null
             }
         }
+
+        // If network request failed, gracefully fallback to cached update info
+        remote ?: com.example.core.session.SessionManager.getLastKnownUpdate()
     }
 
     suspend fun saveAppUpdate(info: com.example.domain.model.AppUpdateInfo): Boolean = withContext(Dispatchers.IO) {
         val json = JSONObject().apply {
-            put("latestVersionCode", info.latestVersionCode)
-            put("latestVersionName", info.latestVersionName)
-            put("minRequiredVersionCode", info.minRequiredVersionCode)
-            put("isForceUpdate", info.isForceUpdate)
-            put("releaseNotes", info.releaseNotes)
-            put("downloadUrl", info.downloadUrl)
+            // Standard requested schema
+            put("version_code", info.versionCode)
+            put("version_name", info.versionName)
+            put("apk_url", info.apkUrl)
+            put("update_message", info.updateMessage)
+            put("is_forced", info.isForced)
+            put("min_supported_version_code", info.minSupportedVersionCode)
+            put("sha256", info.sha256)
+            put("apk_size_bytes", info.apkSizeBytes)
+            put("release_date", info.releaseDate)
+
+            // Backward-compatibility keys
+            put("latestVersionCode", info.versionCode)
+            put("latestVersionName", info.versionName)
+            put("downloadUrl", info.apkUrl)
+            put("releaseNotes", info.updateMessage)
+            put("isForceUpdate", info.isForced)
+            put("minRequiredVersionCode", info.minSupportedVersionCode)
             put("apkSizeBytes", info.apkSizeBytes)
             put("releaseDate", info.releaseDate)
             put("updatedAt", System.currentTimeMillis())
         }
         val body = json.toString().toRequestBody(JSON_MEDIA_TYPE)
 
-        executeWriteWithFailover("saveAppUpdate") { baseUrl ->
+        val success = executeWriteWithFailover("saveAppUpdate") { baseUrl ->
             val request = Request.Builder()
                 .url(ServerConfig.appUpdateUrl(baseUrl))
                 .put(body)
                 .build()
             client.newCall(request).execute().use { it.isSuccessful }
         }
+
+        if (success) {
+            com.example.core.session.SessionManager.saveLastKnownUpdate(info)
+        }
+        success
     }
 
     suspend fun deleteAppUpdate(): Boolean = withContext(Dispatchers.IO) {
-        executeWriteWithFailover("deleteAppUpdate") { baseUrl ->
+        val success = executeWriteWithFailover("deleteAppUpdate") { baseUrl ->
             val request = Request.Builder()
                 .url(ServerConfig.appUpdateUrl(baseUrl))
                 .delete()
                 .build()
             client.newCall(request).execute().use { it.isSuccessful }
         }
+        if (success) {
+            com.example.core.session.SessionManager.clearLastKnownUpdate()
+        }
+        success
     }
 }
+

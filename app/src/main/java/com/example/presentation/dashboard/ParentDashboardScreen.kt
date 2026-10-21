@@ -46,8 +46,13 @@ import androidx.compose.ui.unit.dp
 import com.example.domain.model.RecordType
 import com.example.domain.model.User
 import com.example.domain.model.toPersianDigits
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.LaunchedEffect
+import com.example.core.banner.BannerManager
 import com.example.presentation.components.BehaviorRecordCard
+import com.example.presentation.components.HomeBannerCarousel
 import com.example.presentation.components.NezamYarHeader
+import com.example.presentation.components.PtaElectionHomeBanner
 import com.example.presentation.components.StatCard
 import com.example.presentation.viewmodel.MainViewModel
 import com.example.ui.theme.OnPositiveGreenContainer
@@ -64,8 +69,14 @@ fun ParentDashboardScreen(
     user: User?,
     mainViewModel: MainViewModel,
     onNavigateToNotifications: () -> Unit,
+    onNavigateToPtaVoting: () -> Unit = {},
     onMenuClick: () -> Unit = {}
 ) {
+    val context = LocalContext.current
+    LaunchedEffect(Unit) {
+        BannerManager.init(context)
+    }
+    val allBanners by BannerManager.banners.collectAsState()
     val allStudents by mainViewModel.students.collectAsState()
     val allRecords by mainViewModel.records.collectAsState()
     val notifications by mainViewModel.notifications.collectAsState()
@@ -73,6 +84,13 @@ fun ParentDashboardScreen(
     val parentChildIds = user?.childStudentIds ?: emptyList()
     val children = allStudents.filter { parentChildIds.contains(it.id) || it.studentCode == user?.studentCode }.ifEmpty {
         allStudents.take(1)
+    }
+
+    val parentBanners = remember(allBanners, children, user) {
+        BannerManager.getBannersForUser(
+            user = user,
+            parentChildren = children.map { Pair(it.grade, it.className) }
+        )
     }
 
     var selectedChildId by remember(children) {
@@ -84,7 +102,7 @@ fun ParentDashboardScreen(
     val unreadNotifs = notifications.count { !it.read && it.recipientUserId == user?.id }
 
     var selectedTab by remember { mutableIntStateOf(0) }
-    val tabTitles = listOf("⭐ موفقیت‌ها", "🎖 تشویق‌ها", "⚠️ تذکرها", "📋 سوابق کامل")
+    val tabTitles = listOf("موفقیت‌ها", "تشویق‌ها", "تذکرها", "سوابق کامل")
 
     val displayedRecords = when (selectedTab) {
         0 -> childRecords.filter { it.type == RecordType.ACHIEVEMENT }
@@ -134,6 +152,25 @@ fun ParentDashboardScreen(
             }
         }
 
+        // 16:9 Auto-sliding Home Banners Carousel
+        if (parentBanners.isNotEmpty()) {
+            item {
+                HomeBannerCarousel(
+                    banners = parentBanners,
+                    canManage = false,
+                    modifier = Modifier.padding(vertical = 4.dp)
+                )
+            }
+        }
+
+        // گزینه موقت: انتخاب انجمن و اولیا و مربیان
+        item {
+            PtaElectionHomeBanner(
+                onClick = onNavigateToPtaVoting,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+            )
+        }
+
         // Child Switcher (if more than one child)
         if (children.size > 1) {
             item {
@@ -173,15 +210,15 @@ fun ParentDashboardScreen(
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(56.dp)
+                                    .size(50.dp)
                                     .clip(CircleShape)
-                                    .background(SchoolBluePrimary),
+                                    .background(SchoolBlueContainer),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
                                     text = "${child.firstName.take(1)}${child.lastName.take(1)}",
-                                    color = Color.White,
-                                    style = MaterialTheme.typography.titleLarge,
+                                    color = SchoolBluePrimary,
+                                    style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold
                                 )
                             }

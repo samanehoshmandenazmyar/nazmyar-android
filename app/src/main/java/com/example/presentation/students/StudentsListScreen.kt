@@ -72,6 +72,8 @@ import androidx.compose.runtime.mutableIntStateOf
 import com.example.ui.theme.PositiveGreen
 import kotlin.random.Random
 import com.example.data.demo.DemoData
+import com.example.data.demo.AllowedStudentsRegistry
+import com.example.domain.model.User
 import com.example.domain.model.UserRole
 import com.example.domain.model.toPersianDigits
 import com.example.domain.model.toUser
@@ -111,22 +113,62 @@ fun StudentsListScreen(
 
     val allUsers by authViewModel.allUsers.collectAsState()
 
-    // Special individuals list (includes creator, school staff e.g. Mehdi Faryabi and Yasin Dorahaki, and students with good rank)
+    // Special individuals list: explicitly includes Mehdi Faryabi, Yasin Darahki, Creator,
+    // and ONLY users/students who have a rank OTHER THAN "دانش‌آموز", "پدر دانش‌آموز", or "مادر دانش‌آموز"
     val specialUsers = remember(currentUser, students, allUsers) {
         val list = mutableListOf<User>()
-        // 1. Staff users (Creator, Manager Mehdi Faryabi, Counselor Yasin Dorahaki, etc.)
-        val staffList = allUsers.filter { it.role != UserRole.STUDENT && it.role != UserRole.PARENT }
-        if (staffList.isNotEmpty()) {
-            list.addAll(staffList)
+
+        fun isExcludedBaseRank(rank: String?): Boolean {
+            if (rank.isNullOrBlank()) return true
+            val normalized = rank.trim().replace("‌", " ").replace("\\s+".toRegex(), " ")
+            return normalized == "دانش آموز" ||
+                normalized == "پدر دانش آموز" ||
+                normalized == "مادر دانش آموز"
+        }
+
+        val sourceUsers = if (allUsers.isNotEmpty()) {
+            (allUsers + DemoData.demoUsers).distinctBy { it.id }
         } else {
-            list.addAll(DemoData.demoUsers)
+            DemoData.demoUsers
         }
-        if (currentUser != null && currentUser?.isCreator == true && list.none { it.id == currentUser?.id }) {
-            list.add(currentUser!!)
+
+        // 1. Mandatory designated special persons (as requested: Mehdi Faryabi, Yasin Darahki, and Creator)
+        val faryabi = sourceUsers.firstOrNull {
+            it.id == "user_manager_mehdi_faryabi" || it.name.replace(" ", "") == "مهدیفاریابی"
+        } ?: DemoData.demoUsers.firstOrNull { it.id == "user_manager_mehdi_faryabi" }
+
+        val dorahaki = sourceUsers.firstOrNull {
+            it.id == "user_counselor_yasin_dorahaki" || it.name.replace(" ", "") == "یاسیندراهکی"
+        } ?: DemoData.demoUsers.firstOrNull { it.id == "user_counselor_yasin_dorahaki" }
+
+        val creator = currentUser?.takeIf { it.isCreator }
+            ?: sourceUsers.firstOrNull { it.isCreator }
+            ?: DemoData.demoUsers.firstOrNull { it.isCreator }
+
+        if (creator != null) list.add(creator)
+        if (faryabi != null) list.add(faryabi)
+        if (dorahaki != null) list.add(dorahaki)
+
+        // 2. All other registered users whose rank is other than student / father / mother
+        sourceUsers.forEach { u ->
+            val isDesignated = (u.id == faryabi?.id || u.id == dorahaki?.id || u.id == creator?.id)
+            if (!isDesignated) {
+                val hasSpecialRank = !isExcludedBaseRank(u.rankTitle) ||
+                    u.extraRanks.any { !isExcludedBaseRank(it) }
+                if (hasSpecialRank) {
+                    list.add(u)
+                }
+            }
         }
-        // 2. Students with good ranks appear in the Special Individuals tab as requested by the user:
-        val goodRankStudents = students.filter { it.hasGoodRank() }.map { it.toUser() }
-        list.addAll(goodRankStudents)
+
+        // 3. Students from students list who have a rank other than "دانش‌آموز"
+        students.forEach { s ->
+            val hasSpecialRank = !isExcludedBaseRank(s.rankTitle) ||
+                s.extraRanks.any { !isExcludedBaseRank(it) }
+            if (hasSpecialRank) {
+                list.add(s.toUser())
+            }
+        }
 
         list.distinctBy { it.id }
     }
@@ -195,7 +237,7 @@ fun StudentsListScreen(
 
                     Text(
                         text = if (selectedTabIndex == 0) {
-                            "${students.size.toPersianDigits()} دانش‌آموز"
+                            "${students.size.toPersianDigits()} مخاطب"
                         } else {
                             "${filteredSpecialUsers.size.toPersianDigits()} فرد ویژه"
                         },
@@ -205,7 +247,7 @@ fun StudentsListScreen(
                 }
             }
 
-            // Tabs Row (دانش‌آموزان / افراد ویژه)
+            // Tabs Row (مخاطب‌ها / افراد ویژه)
             item {
                 Card(
                     modifier = Modifier
@@ -228,7 +270,7 @@ fun StudentsListScreen(
                             onClick = { selectedTabIndex = 0 },
                             text = {
                                 Text(
-                                    text = "دانش‌آموزان (${students.size.toPersianDigits()})",
+                                    text = "مخاطب‌ها (${students.size.toPersianDigits()})",
                                     style = MaterialTheme.typography.bodyMedium.copy(
                                         fontFamily = VazirmatnFontFamily,
                                         fontWeight = if (selectedTabIndex == 0) FontWeight.Bold else FontWeight.Light
@@ -237,8 +279,8 @@ fun StudentsListScreen(
                             },
                             icon = {
                                 Icon(
-                                    imageVector = Icons.Default.School,
-                                    contentDescription = "دانش‌آموزان",
+                                    imageVector = Icons.Default.Person,
+                                    contentDescription = "مخاطب‌ها",
                                     modifier = Modifier.size(18.dp)
                                 )
                             }
@@ -248,7 +290,7 @@ fun StudentsListScreen(
                             onClick = { selectedTabIndex = 1 },
                             text = {
                                 Text(
-                                    text = "افراد ویژه ⭐ (${filteredSpecialUsers.size.toPersianDigits()})",
+                                    text = "افراد ویژه (${filteredSpecialUsers.size.toPersianDigits()})",
                                     style = MaterialTheme.typography.bodyMedium.copy(
                                         fontFamily = VazirmatnFontFamily,
                                         fontWeight = if (selectedTabIndex == 1) FontWeight.Bold else FontWeight.Light
@@ -260,7 +302,7 @@ fun StudentsListScreen(
                                     imageVector = Icons.Default.Star,
                                     contentDescription = "افراد ویژه",
                                     modifier = Modifier.size(18.dp),
-                                    tint = if (selectedTabIndex == 1) Color(0xFFEAB308) else MaterialTheme.colorScheme.onSurfaceVariant
+                                    tint = if (selectedTabIndex == 1) SchoolBluePrimary else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         )
@@ -351,13 +393,13 @@ fun StudentsListScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = if (selectedTabIndex == 0) "فهرست دانش‌آموزان" else "فهرست افراد ویژه و مدیران",
+                        text = if (selectedTabIndex == 0) "فهرست مخاطب‌ها" else "فهرست افراد ویژه و مدیران",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
                         text = if (selectedTabIndex == 0) {
-                            "${students.size.toPersianDigits()} دانش‌آموز"
+                            "${students.size.toPersianDigits()} مخاطب"
                         } else {
                             "${filteredSpecialUsers.size.toPersianDigits()} نفر"
                         },
@@ -407,6 +449,7 @@ fun StudentsListScreen(
                     items(students, key = { it.id }) { student ->
                         StudentListItemCard(
                             student = student,
+                            allUsers = allUsers,
                             onClick = { onStudentClick(student.id) },
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
                         )
@@ -440,10 +483,19 @@ fun StudentsListScreen(
                     }
                 } else {
                     items(filteredSpecialUsers, key = { it.id }) { user ->
+                        val matchingStudent = students.firstOrNull {
+                            it.id == user.id ||
+                            (user.studentCode.isNotBlank() && it.studentCode == user.studentCode) ||
+                            (AllowedStudentsRegistry.normalize(it.fullName) == AllowedStudentsRegistry.normalize(user.name))
+                        }
                         SpecialUserListItemCard(
                             user = user,
+                            allUsers = allUsers,
+                            matchingStudent = matchingStudent,
                             onClick = {
-                                if (students.any { it.id == user.id }) {
+                                if (matchingStudent != null) {
+                                    onStudentClick(matchingStudent.id)
+                                } else if (user.isCreator) {
                                     onStudentClick(user.id)
                                 }
                             },
@@ -642,7 +694,7 @@ fun AddStudentDialog(
                     },
                     supportingText = {
                         Text(
-                            text = "کد ورود: $code (برای تغییر روی فلش دایره‌ای 🔄 بزنید)",
+                            text = "کد ورود: $code (برای تغییر، دکمه بازتولید را لمس کنید)",
                             style = MaterialTheme.typography.bodySmall.copy(
                                 fontFamily = VazirmatnFontFamily,
                                 fontWeight = FontWeight.Light

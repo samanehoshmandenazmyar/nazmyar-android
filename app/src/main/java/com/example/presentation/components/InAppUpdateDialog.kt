@@ -1,13 +1,9 @@
 package com.example.presentation.components
 
 import android.content.Context
-import android.content.Intent
-import android.net.Uri
 import android.os.Build
-import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -31,13 +27,14 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.InstallMobile
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -46,6 +43,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -64,59 +62,120 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.example.core.update.ApkDownloader
+import com.example.core.update.ApkVerificationResult
+import com.example.core.update.InAppUpdateManager
 import com.example.domain.model.AppUpdateInfo
 import com.example.domain.model.toPersianDigits
 import com.example.ui.theme.PositiveGreen
 import com.example.ui.theme.SchoolBlueContainer
 import com.example.ui.theme.SchoolBluePrimary
+import com.example.ui.theme.VazirmatnFontFamily
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
-import okhttp3.Request
 import java.io.File
-import java.io.FileOutputStream
 import java.util.Locale
 
 enum class UpdateState {
     READY_TO_DOWNLOAD,
     DOWNLOADING,
+    VERIFYING,
     PERMISSION_REQUEST,
     READY_TO_INSTALL,
     INSTALLING,
     ERROR
 }
 
+/**
+ * Enterprise In-App Update Dialog for NezamYar.
+ * Performs 100% genuine byte-level HTTP streaming downloads directly from GitHub Releases / HTTPS servers.
+ * Calculates real file size from Content-Length or byte-streaming, with zero simulated or fake progress.
+ */
 @Composable
 fun InAppUpdateDialog(
     updateInfo: AppUpdateInfo,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
 
     var updateState by remember { mutableStateOf(UpdateState.READY_TO_DOWNLOAD) }
     var downloadProgress by remember { mutableFloatStateOf(0f) }
     var downloadedBytes by remember { mutableLongStateOf(0L) }
-    var totalBytes by remember { mutableLongStateOf(if (updateInfo.apkSizeBytes > 0) updateInfo.apkSizeBytes else 15_400_000L) }
+    // Start with -1L (indeterminate) unless positive server size is already verified
+    var totalBytes by remember {
+        mutableLongStateOf(if (updateInfo.apkSizeBytes > 0L) updateInfo.apkSizeBytes else -1L)
+    }
+    var isQueryingServerSize by remember { mutableStateOf(totalBytes <= 0L) }
     var downloadSpeedKbps by remember { mutableLongStateOf(0L) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var errorDetails by remember { mutableStateOf<String?>(null) }
     var downloadedFile by remember { mutableStateOf<File?>(null) }
+    var downloadJob by remember { mutableStateOf<Job?>(null) }
 
-    // Settings launcher for unknown app sources (Android 8.0+)
+    val currentVersionCode = remember { InAppUpdateManager.getCurrentVersionCode(context) }
+    val currentVersionName = remember { InAppUpdateManager.getCurrentVersionName(context) }
+    val isForced = remember { InAppUpdateManager.isForcedUpdate(currentVersionCode, updateInfo) }
+    val targetUrl = remember(updateInfo) { updateInfo.apkUrl.ifBlank { updateInfo.downloadUrl }.trim() }
+
+    // Query genuine remote file size via HTTP HEAD / Range request if not known
+    LaunchedEffect(targetUrl) {
+        if (totalBytes <= 0L && InAppUpdateManager.isValidDownloadUrl(targetUrl)) {
+            isQueryingServerSize = true
+            val realLength = ApkDownloader.queryRemoteFileSize(targetUrl)
+            if (realLength > 0L) {
+                totalBytes = realLength
+            }
+            isQueryingServerSize = false
+        }
+    }
+
+    // Lifecycle observer: check if installed version updated when user returns from package installer
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                val installedCode = InAppUpdateManager.getCurrentVersionCode(context)
+                if (installedCode >= updateInfo.versionCode) {
+                    downloadedFile?.delete()
+                    onDismiss()
+                } else if (updateState == UpdateState.PERMISSION_REQUEST) {
+                    if (InAppUpdateManager.canRequestPackageInstalls(context)) {
+                        updateState = UpdateState.READY_TO_INSTALL
+                    }
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            downloadJob?.cancel()
+        }
+    }
+
+    // Permission launcher for unknown app sources (Android 8.0+)
     val installPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            if (context.packageManager.canRequestPackageInstalls()) {
-                downloadedFile?.let { installApk(context, it) }
-            } else {
-                updateState = UpdateState.PERMISSION_REQUEST
+        if (InAppUpdateManager.canRequestPackageInstalls(context)) {
+            updateState = UpdateState.READY_TO_INSTALL
+            downloadedFile?.let { apk ->
+                try {
+                    val intent = InAppUpdateManager.createInstallIntent(context, apk)
+                    context.startActivity(intent)
+                } catch (e: Exception) {
+                    errorMessage = "خطا در اجرای برنامه نصب اندروید: ${e.message}"
+                    updateState = UpdateState.ERROR
+                }
             }
         } else {
-            downloadedFile?.let { installApk(context, it) }
+            updateState = UpdateState.PERMISSION_REQUEST
         }
     }
 
@@ -125,99 +184,95 @@ fun InAppUpdateDialog(
         label = "update_download_progress"
     )
 
-    fun startDownload() {
+    fun startRealDownload() {
+        if (!InAppUpdateManager.isValidDownloadUrl(targetUrl)) {
+            errorMessage = "آدرس دانلود نسخه جدید نامعتبر است (باید با https:// شروع شود)."
+            updateState = UpdateState.ERROR
+            return
+        }
+
         updateState = UpdateState.DOWNLOADING
         downloadProgress = 0f
         downloadedBytes = 0L
+        downloadSpeedKbps = 0L
         errorMessage = null
+        errorDetails = null
 
-        scope.launch(Dispatchers.IO) {
+        val apkDir = File(context.cacheDir, "updates").apply { mkdirs() }
+        val targetFile = File(apkDir, "nezamyar_v${updateInfo.versionName}.apk")
+        downloadedFile = targetFile
+
+        // Fast path: if genuine valid APK is already completely downloaded, verify and skip redownload
+        if (targetFile.exists() && targetFile.length() > 0L) {
+            val cachedResult = InAppUpdateManager.verifyApkIntegrity(context, targetFile, updateInfo.sha256)
+            if (cachedResult is ApkVerificationResult.Success) {
+                totalBytes = targetFile.length()
+                downloadedBytes = targetFile.length()
+                downloadProgress = 1f
+                updateState = UpdateState.READY_TO_INSTALL
+                return
+            } else {
+                targetFile.delete()
+            }
+        }
+
+        downloadJob?.cancel()
+        downloadJob = scope.launch(Dispatchers.IO) {
             try {
-                val apkDir = File(context.cacheDir, "updates").apply { mkdirs() }
-                val targetFile = File(apkDir, "nezamyar_v${updateInfo.latestVersionName}.apk")
-                downloadedFile = targetFile
-
-                // If real remote URL exists, attempt real download
-                var downloadedSuccessfully = false
-                val validUrl = updateInfo.downloadUrl.takeIf { it.startsWith("http://") || it.startsWith("https://") }
-
-                if (validUrl != null) {
-                    try {
-                        val client = OkHttpClient()
-                        val request = Request.Builder().url(validUrl).build()
-                        val response = client.newCall(request).execute()
-                        if (response.isSuccessful) {
-                            val body = response.body
-                            if (body != null) {
-                                val contentLength = body.contentLength().takeIf { it > 0 } ?: totalBytes
-                                totalBytes = contentLength
-                                val input = body.byteStream()
-                                val output = FileOutputStream(targetFile)
-                                val buffer = ByteArray(8 * 1024)
-                                var read: Int
-                                var totalRead = 0L
-                                var lastTime = System.currentTimeMillis()
-                                var lastReadSince = 0L
-
-                                while (input.read(buffer).also { read = it } != -1) {
-                                    output.write(buffer, 0, read)
-                                    totalRead += read
-                                    val now = System.currentTimeMillis()
-                                    if (now - lastTime >= 200) {
-                                        val deltaSec = (now - lastTime) / 1000.0
-                                        if (deltaSec > 0) {
-                                            downloadSpeedKbps = ((totalRead - lastReadSince) / 1024.0 / deltaSec).toLong()
-                                        }
-                                        lastTime = now
-                                        lastReadSince = totalRead
-                                        downloadedBytes = totalRead
-                                        downloadProgress = (totalRead.toFloat() / contentLength).coerceIn(0f, 1f)
-                                    }
-                                }
-                                output.flush()
-                                output.close()
-                                input.close()
-                                downloadedSuccessfully = true
+                // Execute real byte-level streaming HTTP download
+                val completedFile = ApkDownloader.downloadApk(
+                    url = targetUrl,
+                    destinationFile = targetFile,
+                    onProgress = { currentRead, serverTotal, speed ->
+                        // Safely dispatch UI state updates to the Main thread
+                        scope.launch(Dispatchers.Main) {
+                            downloadedBytes = currentRead
+                            if (serverTotal > 0L) {
+                                totalBytes = serverTotal
+                                downloadProgress = (currentRead.toFloat() / serverTotal).coerceIn(0f, 1f)
+                            } else {
+                                downloadProgress = 0f
                             }
+                            downloadSpeedKbps = speed
                         }
-                    } catch (_: Exception) {
-                        downloadedSuccessfully = false
-                    }
-                }
-
-                // If direct network failed or URL is mock github URL, perform high-fidelity realistic progress simulator
-                if (!downloadedSuccessfully) {
-                    val simTotal = if (totalBytes > 0) totalBytes else 15_400_000L
-                    totalBytes = simTotal
-                    var currBytes = 0L
-                    val output = FileOutputStream(targetFile)
-                    // create dummy bytes to form realistic file
-                    val dummyChunk = ByteArray(64 * 1024)
-
-                    while (currBytes < simTotal && isActive) {
-                        // simulate network variations (1.2 MB/s to 3.5 MB/s)
-                        val chunkSize = (400_000..750_000).random()
-                        delay((120..220).random().toLong())
-                        currBytes = (currBytes + chunkSize).coerceAtMost(simTotal)
-                        output.write(dummyChunk, 0, 1024)
-
-                        val speed = (chunkSize / 1024L) * 5L
-                        downloadSpeedKbps = speed
-                        downloadedBytes = currBytes
-                        downloadProgress = (currBytes.toFloat() / simTotal).coerceIn(0f, 1f)
-                    }
-                    output.flush()
-                    output.close()
-                }
+                    },
+                    isCancelled = { !isActive }
+                )
 
                 withContext(Dispatchers.Main) {
                     downloadProgress = 1f
-                    downloadedBytes = totalBytes
-                    updateState = UpdateState.READY_TO_INSTALL
+                    downloadedBytes = completedFile.length()
+                    totalBytes = completedFile.length()
+                    updateState = UpdateState.VERIFYING
+                }
+
+                // Verify genuine APK package structure and SHA-256
+                val verifyResult = InAppUpdateManager.verifyApkIntegrity(
+                    context = context,
+                    apkFile = completedFile,
+                    expectedSha256 = updateInfo.sha256
+                )
+
+                withContext(Dispatchers.Main) {
+                    when (verifyResult) {
+                        is ApkVerificationResult.Success -> {
+                            updateState = UpdateState.READY_TO_INSTALL
+                        }
+                        is ApkVerificationResult.Error -> {
+                            completedFile.delete()
+                            errorMessage = verifyResult.messageFarsi
+                            errorDetails = verifyResult.technicalDetails
+                            updateState = UpdateState.ERROR
+                        }
+                    }
+                }
+            } catch (e: InterruptedException) {
+                withContext(Dispatchers.Main) {
+                    updateState = UpdateState.READY_TO_DOWNLOAD
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
-                    errorMessage = "خطا در دریافت فایل به‌روزرسانی: ${e.message}"
+                    errorMessage = e.message ?: "خطا در دریافت فایل بسته نصبی از سرور."
                     updateState = UpdateState.ERROR
                 }
             }
@@ -226,28 +281,38 @@ fun InAppUpdateDialog(
 
     fun initiateInstall() {
         val file = downloadedFile ?: return
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            if (!context.packageManager.canRequestPackageInstalls()) {
-                updateState = UpdateState.PERMISSION_REQUEST
-                val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
-                    data = Uri.parse("package:${context.packageName}")
-                }
-                installPermissionLauncher.launch(intent)
-                return
-            }
+        if (!file.exists() || file.length() <= 0L) {
+            errorMessage = "فایل بسته نصبی روی حافظه دستگاه یافت نشد. لطفاً مجدداً دانلود نمایید."
+            updateState = UpdateState.ERROR
+            return
         }
-        installApk(context, file)
+
+        if (!InAppUpdateManager.canRequestPackageInstalls(context)) {
+            updateState = UpdateState.PERMISSION_REQUEST
+            val intent = InAppUpdateManager.createManageUnknownAppSourcesIntent(context)
+            installPermissionLauncher.launch(intent)
+            return
+        }
+
+        try {
+            updateState = UpdateState.INSTALLING
+            val installIntent = InAppUpdateManager.createInstallIntent(context, file)
+            context.startActivity(installIntent)
+        } catch (e: Exception) {
+            errorMessage = "خطا در فراخوانی بخش نصب اندروید: ${e.message}"
+            updateState = UpdateState.ERROR
+        }
     }
 
     AlertDialog(
         onDismissRequest = {
-            if (!updateInfo.isForceUpdate && updateState != UpdateState.DOWNLOADING) {
+            if (!isForced && updateState != UpdateState.DOWNLOADING && updateState != UpdateState.VERIFYING) {
                 onDismiss()
             }
         },
         properties = DialogProperties(
-            dismissOnBackPress = !updateInfo.isForceUpdate && updateState != UpdateState.DOWNLOADING,
-            dismissOnClickOutside = !updateInfo.isForceUpdate && updateState != UpdateState.DOWNLOADING
+            dismissOnBackPress = !isForced && updateState != UpdateState.DOWNLOADING && updateState != UpdateState.VERIFYING,
+            dismissOnClickOutside = !isForced && updateState != UpdateState.DOWNLOADING && updateState != UpdateState.VERIFYING
         ),
         title = {
             Row(
@@ -256,34 +321,37 @@ fun InAppUpdateDialog(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(44.dp)
+                        .size(46.dp)
                         .clip(CircleShape)
-                        .background(if (updateInfo.isForceUpdate) Color(0xFFFEE2E2) else SchoolBlueContainer),
+                        .background(if (isForced) Color(0xFFFEE2E2) else SchoolBlueContainer),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = if (updateInfo.isForceUpdate) Icons.Default.Warning else Icons.Default.SystemUpdate,
+                        imageVector = if (isForced) Icons.Default.Warning else Icons.Default.SystemUpdate,
                         contentDescription = null,
-                        tint = if (updateInfo.isForceUpdate) Color(0xFFDC2626) else SchoolBluePrimary,
-                        modifier = Modifier.size(24.dp)
+                        tint = if (isForced) Color(0xFFDC2626) else SchoolBluePrimary,
+                        modifier = Modifier.size(26.dp)
                     )
                 }
                 Spacer(modifier = Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = if (updateInfo.isForceUpdate) "به‌روزرسانی اجباری سامانه" else "نسخه جدید سامانه نظمیار",
-                        style = MaterialTheme.typography.titleMedium,
+                        text = if (isForced) "به‌روزرسانی ضروری سامانه" else "نسخه جدید منتشر شد",
+                        style = MaterialTheme.typography.titleMedium.copy(fontFamily = VazirmatnFontFamily),
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "نسخه جدید ${updateInfo.latestVersionName} (کد نسخه: ${updateInfo.latestVersionCode.toPersianDigits()})",
-                        style = MaterialTheme.typography.bodySmall,
+                        text = "نسخه ${updateInfo.versionName} (کد نسخه: ${updateInfo.versionCode.toPersianDigits()})",
+                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = VazirmatnFontFamily),
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                if (!updateInfo.isForceUpdate && updateState != UpdateState.DOWNLOADING) {
-                    IconButton(onClick = onDismiss) {
+                if (!isForced && updateState != UpdateState.DOWNLOADING && updateState != UpdateState.VERIFYING) {
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.testTag("update_dialog_close_icon")
+                    ) {
                         Icon(Icons.Default.Close, contentDescription = "بستن")
                     }
                 }
@@ -295,7 +363,7 @@ fun InAppUpdateDialog(
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
             ) {
-                // Info Card: current vs new version
+                // Info Card: Current Version vs Server Version
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = Color(0xFFF8FAFC),
@@ -312,12 +380,12 @@ fun InAppUpdateDialog(
                         Column {
                             Text(
                                 text = "نسخه فعلی شما:",
-                                style = MaterialTheme.typography.labelSmall,
+                                style = MaterialTheme.typography.labelSmall.copy(fontFamily = VazirmatnFontFamily),
                                 color = Color(0xFF64748B)
                             )
                             Text(
-                                text = "v${com.example.BuildConfig.VERSION_NAME}",
-                                style = MaterialTheme.typography.titleSmall,
+                                text = "v$currentVersionName (کد: ${currentVersionCode.toPersianDigits()})",
+                                style = MaterialTheme.typography.titleSmall.copy(fontFamily = VazirmatnFontFamily),
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF334155)
                             )
@@ -332,13 +400,13 @@ fun InAppUpdateDialog(
 
                         Column(horizontalAlignment = Alignment.End) {
                             Text(
-                                text = "نسخه در دسترس سرور:",
-                                style = MaterialTheme.typography.labelSmall,
+                                text = "نسخه جدید در دسترس:",
+                                style = MaterialTheme.typography.labelSmall.copy(fontFamily = VazirmatnFontFamily),
                                 color = Color(0xFF64748B)
                             )
                             Text(
-                                text = "v${updateInfo.latestVersionName} ✨",
-                                style = MaterialTheme.typography.titleSmall,
+                                text = "v${updateInfo.versionName}",
+                                style = MaterialTheme.typography.titleSmall.copy(fontFamily = VazirmatnFontFamily),
                                 fontWeight = FontWeight.Bold,
                                 color = PositiveGreen
                             )
@@ -348,11 +416,12 @@ fun InAppUpdateDialog(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Release Notes
-                if (updateInfo.releaseNotes.isNotBlank()) {
+                // Release Notes / Update Message
+                val notes = updateInfo.updateMessage.ifBlank { updateInfo.releaseNotes }
+                if (notes.isNotBlank()) {
                     Text(
                         text = "تغییرات و امکانات نسخه جدید:",
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodyMedium.copy(fontFamily = VazirmatnFontFamily),
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -363,39 +432,81 @@ fun InAppUpdateDialog(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
-                            text = updateInfo.releaseNotes,
-                            style = MaterialTheme.typography.bodySmall,
+                            text = notes,
+                            style = MaterialTheme.typography.bodySmall.copy(fontFamily = VazirmatnFontFamily),
                             color = Color(0xFF334155),
-                            lineHeight = 20.sp,
+                            lineHeight = 22.sp,
                             modifier = Modifier.padding(12.dp)
                         )
                     }
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
                 }
 
-                // File size info
-                val formattedSize = String.format(Locale.US, "%.1f", totalBytes / (1024.0 * 1024.0))
+                // Real File Size Display (Calculated from actual server response or local disk)
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = "حجم بسته نصب:",
-                        style = MaterialTheme.typography.bodySmall,
+                        text = "حجم بسته نصبی:",
+                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = VazirmatnFontFamily),
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    val sizeText = when {
+                        downloadedFile != null && downloadedFile!!.exists() && downloadedFile!!.length() > 0L -> {
+                            val mb = String.format(Locale.US, "%.1f", downloadedFile!!.length() / (1024.0 * 1024.0))
+                            "$mb مگابایت (دانلودشده)".toPersianDigits()
+                        }
+                        totalBytes > 0L -> {
+                            val mb = String.format(Locale.US, "%.1f", totalBytes / (1024.0 * 1024.0))
+                            "$mb مگابایت".toPersianDigits()
+                        }
+                        isQueryingServerSize -> "در حال استعلام از سرور..."
+                        else -> "نامشخص (هنگام دانلود محاسبه می‌شود)"
+                    }
                     Text(
-                        text = "$formattedSize مگابایت".toPersianDigits(),
-                        style = MaterialTheme.typography.bodySmall,
+                        text = sizeText,
+                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = VazirmatnFontFamily),
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                 }
 
+                // SHA-256 Checksum badge if available
+                if (updateInfo.sha256.isNotBlank() && updateInfo.sha256.length >= 32) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Security,
+                                contentDescription = null,
+                                tint = Color(0xFF0284C7),
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "اعتبارسنجی هش امنیتی SHA-256:",
+                                style = MaterialTheme.typography.labelSmall.copy(fontFamily = VazirmatnFontFamily),
+                                color = Color(0xFF0369A1)
+                            )
+                        }
+                        Text(
+                            text = "فعال و ایمن",
+                            style = MaterialTheme.typography.labelSmall.copy(fontFamily = VazirmatnFontFamily),
+                            fontWeight = FontWeight.Bold,
+                            color = PositiveGreen
+                        )
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // States UI
+                // Interactive States
                 when (updateState) {
                     UpdateState.READY_TO_DOWNLOAD -> {
                         Surface(
@@ -416,8 +527,12 @@ fun InAppUpdateDialog(
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "برای استفاده از امکانات جدید، بر روی دکمه «دریافت و نصب به‌روزرسانی» کلیک نمایید.",
-                                    style = MaterialTheme.typography.labelSmall,
+                                    text = if (isForced) {
+                                        "برای ادامه استفاده از سامانه نظمیار، دریافت این به‌روزرسانی الزامی است."
+                                    } else {
+                                        "برای ارتقا به آخرین امکانات، بر روی دکمه «به‌روزرسانی» کلیک نمایید."
+                                    },
+                                    style = MaterialTheme.typography.labelSmall.copy(fontFamily = VazirmatnFontFamily),
                                     color = Color(0xFF1E40AF)
                                 )
                             }
@@ -432,14 +547,19 @@ fun InAppUpdateDialog(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "در حال بارگیری از سرور...",
-                                    style = MaterialTheme.typography.bodySmall,
+                                    text = "در حال بارگیری مستقیم فایل از سرور...",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = VazirmatnFontFamily),
                                     fontWeight = FontWeight.Bold,
                                     color = SchoolBluePrimary
                                 )
+                                val percentText = if (totalBytes > 0L) {
+                                    "${(animatedProgress * 100).toInt()}%".toPersianDigits()
+                                } else {
+                                    "در حال دانلود..."
+                                }
                                 Text(
-                                    text = "${(animatedProgress * 100).toInt()}%".toPersianDigits(),
-                                    style = MaterialTheme.typography.titleSmall,
+                                    text = percentText,
+                                    style = MaterialTheme.typography.titleSmall.copy(fontFamily = VazirmatnFontFamily),
                                     fontWeight = FontWeight.Bold,
                                     color = SchoolBluePrimary
                                 )
@@ -447,16 +567,28 @@ fun InAppUpdateDialog(
 
                             Spacer(modifier = Modifier.height(6.dp))
 
-                            LinearProgressIndicator(
-                                progress = { animatedProgress },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(8.dp)
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .testTag("download_progress_bar"),
-                                color = SchoolBluePrimary,
-                                trackColor = Color(0xFFE2E8F0)
-                            )
+                            if (totalBytes > 0L) {
+                                LinearProgressIndicator(
+                                    progress = { animatedProgress },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(8.dp)
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .testTag("download_progress_bar"),
+                                    color = SchoolBluePrimary,
+                                    trackColor = Color(0xFFE2E8F0)
+                                )
+                            } else {
+                                LinearProgressIndicator(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(8.dp)
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .testTag("download_progress_bar"),
+                                    color = SchoolBluePrimary,
+                                    trackColor = Color(0xFFE2E8F0)
+                                )
+                            }
 
                             Spacer(modifier = Modifier.height(6.dp))
 
@@ -465,18 +597,50 @@ fun InAppUpdateDialog(
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 val downloadedMb = String.format(Locale.US, "%.1f", downloadedBytes / (1024.0 * 1024.0))
+                                val progressLabel = if (totalBytes > 0L) {
+                                    val totalMb = String.format(Locale.US, "%.1f", totalBytes / (1024.0 * 1024.0))
+                                    "$downloadedMb / $totalMb مگابایت".toPersianDigits()
+                                } else {
+                                    "$downloadedMb مگابایت دریافت‌شده".toPersianDigits()
+                                }
                                 Text(
-                                    text = "$downloadedMb / $formattedSize مگابایت".toPersianDigits(),
-                                    style = MaterialTheme.typography.labelSmall,
+                                    text = progressLabel,
+                                    style = MaterialTheme.typography.labelSmall.copy(fontFamily = VazirmatnFontFamily),
                                     color = Color(0xFF64748B)
                                 )
                                 if (downloadSpeedKbps > 0) {
                                     Text(
-                                        text = "سرعت اینترنت: ${downloadSpeedKbps.toPersianDigits()} KB/s",
-                                        style = MaterialTheme.typography.labelSmall,
+                                        text = "سرعت: ${downloadSpeedKbps.toPersianDigits()} KB/s",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontFamily = VazirmatnFontFamily),
                                         color = Color(0xFF64748B)
                                     )
                                 }
+                            }
+                        }
+                    }
+
+                    UpdateState.VERIFYING -> {
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color(0xFFF0FDF4),
+                            border = BorderStroke(1.dp, Color(0xFF86EFAC)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    color = PositiveGreen,
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text(
+                                    text = "در حال اعتبارسنجی بایت‌های دریافتی و ساختار پکیج APK...",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = VazirmatnFontFamily),
+                                    color = Color(0xFF166534)
+                                )
                             }
                         }
                     }
@@ -500,14 +664,14 @@ fun InAppUpdateDialog(
                                     Text(
                                         text = "مجوز نصب برنامه لازم است",
                                         fontWeight = FontWeight.Bold,
-                                        style = MaterialTheme.typography.bodySmall,
+                                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = VazirmatnFontFamily),
                                         color = Color(0xFF92400E)
                                     )
                                 }
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    text = "جهت تکمیل به‌روزرسانی، لطفاً در صفحه تنظیمات اجازه «نصب برنامه‌های ناشناس» را برای سامانه فعال کنید.",
-                                    style = MaterialTheme.typography.labelSmall,
+                                    text = "جهت تکمیل فرآیند نصب نسخه جدید، لطفاً در صفحه تنظیمات گزینه «نصب برنامه‌های ناشناس» را برای سامانه فعال فرمایید.",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontFamily = VazirmatnFontFamily),
                                     color = Color(0xFF78350F)
                                 )
                             }
@@ -534,14 +698,16 @@ fun InAppUpdateDialog(
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Column {
                                     Text(
-                                        text = "فایل با موفقیت بارگیری شد!",
+                                        text = "بسته نصبی با موفقیت و صحت کامل دریافت شد!",
                                         fontWeight = FontWeight.Bold,
-                                        style = MaterialTheme.typography.bodySmall,
+                                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = VazirmatnFontFamily),
                                         color = Color(0xFF166534)
                                     )
+                                    val diskBytes = downloadedFile?.length() ?: 0L
+                                    val diskMb = String.format(Locale.US, "%.1f", diskBytes / (1024.0 * 1024.0))
                                     Text(
-                                        text = "آماده نصب بر روی دستگاه شما.",
-                                        style = MaterialTheme.typography.labelSmall,
+                                        text = "حجم واقعی ذخیره‌شده روی حافظه: $diskMb مگابایت".toPersianDigits(),
+                                        style = MaterialTheme.typography.labelSmall.copy(fontFamily = VazirmatnFontFamily),
                                         color = Color(0xFF15803D)
                                     )
                                 }
@@ -551,8 +717,8 @@ fun InAppUpdateDialog(
 
                     UpdateState.INSTALLING -> {
                         Text(
-                            text = "در حال باز کردن نصب‌کننده اندروید...",
-                            style = MaterialTheme.typography.bodySmall,
+                            text = "در حال انتقال بسته نصبی به برنامه مدیریت نصب اندروید...",
+                            style = MaterialTheme.typography.bodySmall.copy(fontFamily = VazirmatnFontFamily),
                             color = SchoolBluePrimary
                         )
                     }
@@ -564,12 +730,22 @@ fun InAppUpdateDialog(
                             border = BorderStroke(1.dp, Color(0xFFFCA5A5)),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text(
-                                text = errorMessage ?: "خطا در فرآیند به‌روزرسانی.",
-                                color = Color(0xFF991B1B),
-                                style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.padding(10.dp)
-                            )
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Text(
+                                    text = errorMessage ?: "خطایی در فرآیند دریافت به‌روزرسانی رخ داد.",
+                                    color = Color(0xFF991B1B),
+                                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = VazirmatnFontFamily),
+                                    fontWeight = FontWeight.Bold
+                                )
+                                errorDetails?.let { details ->
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = details,
+                                        color = Color(0xFFB91C1C),
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -579,45 +755,71 @@ fun InAppUpdateDialog(
             when (updateState) {
                 UpdateState.READY_TO_DOWNLOAD -> {
                     Button(
-                        onClick = { startDownload() },
+                        onClick = { startRealDownload() },
                         colors = ButtonDefaults.buttonColors(containerColor = SchoolBluePrimary),
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.testTag("start_update_download_button")
                     ) {
                         Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text(text = "دریافت و دانلود نسخه جدید", fontWeight = FontWeight.Bold)
+                        Text(
+                            text = "به‌روزرسانی",
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = VazirmatnFontFamily
+                        )
                     }
                 }
 
                 UpdateState.DOWNLOADING -> {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = {},
+                            enabled = false,
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            val text = if (totalBytes > 0L) {
+                                "در حال دانلود (${(animatedProgress * 100).toInt()}%)".toPersianDigits()
+                            } else {
+                                "در حال دریافت..."
+                            }
+                            Text(text = text, fontFamily = VazirmatnFontFamily)
+                        }
+                        if (!isForced) {
+                            OutlinedButton(
+                                onClick = {
+                                    downloadJob?.cancel()
+                                    updateState = UpdateState.READY_TO_DOWNLOAD
+                                },
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Text("لغو", fontFamily = VazirmatnFontFamily)
+                            }
+                        }
+                    }
+                }
+
+                UpdateState.VERIFYING -> {
                     Button(
                         onClick = {},
                         enabled = false,
                         shape = RoundedCornerShape(10.dp)
                     ) {
-                        Text("در حال دانلود... (${(animatedProgress * 100).toInt()}%)".toPersianDigits())
+                        Text(text = "در حال بررسی بسته...", fontFamily = VazirmatnFontFamily)
                     }
                 }
 
                 UpdateState.PERMISSION_REQUEST -> {
                     Button(
                         onClick = {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                                val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
-                                    data = Uri.parse("package:${context.packageName}")
-                                }
-                                installPermissionLauncher.launch(intent)
-                            } else {
-                                initiateInstall()
-                            }
+                            val intent = InAppUpdateManager.createManageUnknownAppSourcesIntent(context)
+                            installPermissionLauncher.launch(intent)
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD97706)),
                         shape = RoundedCornerShape(10.dp)
                     ) {
                         Icon(Icons.Default.InstallMobile, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("اعطای مجوز و ادامه نصب", fontWeight = FontWeight.Bold)
+                        Text("اعطای مجوز و ادامه", fontWeight = FontWeight.Bold, fontFamily = VazirmatnFontFamily)
                     }
                 }
 
@@ -630,7 +832,7 @@ fun InAppUpdateDialog(
                     ) {
                         Icon(Icons.Default.InstallMobile, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text(text = "نصب نسخه جدید روی دستگاه", fontWeight = FontWeight.Bold)
+                        Text(text = "نصب نسخه جدید", fontWeight = FontWeight.Bold, fontFamily = VazirmatnFontFamily)
                     }
                 }
 
@@ -639,56 +841,36 @@ fun InAppUpdateDialog(
                         onClick = { initiateInstall() },
                         shape = RoundedCornerShape(10.dp)
                     ) {
-                        Text("تلاش مجدد نصب")
+                        Text("تلاش مجدد نصب", fontFamily = VazirmatnFontFamily)
                     }
                 }
 
                 UpdateState.ERROR -> {
                     Button(
-                        onClick = { startDownload() },
+                        onClick = { startRealDownload() },
                         colors = ButtonDefaults.buttonColors(containerColor = SchoolBluePrimary),
-                        shape = RoundedCornerShape(10.dp)
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.testTag("retry_update_button")
                     ) {
-                        Text("تلاش مجدد")
+                        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("تلاش مجدد دانلود", fontFamily = VazirmatnFontFamily)
                     }
                 }
             }
         },
         dismissButton = {
-            if (!updateInfo.isForceUpdate && updateState != UpdateState.DOWNLOADING) {
+            if (!isForced && updateState != UpdateState.DOWNLOADING && updateState != UpdateState.VERIFYING) {
                 OutlinedButton(
                     onClick = onDismiss,
-                    shape = RoundedCornerShape(10.dp)
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.testTag("update_dismiss_button")
                 ) {
-                    Text("بعداً یادآوری کن")
+                    Text("بعداً", fontFamily = VazirmatnFontFamily)
                 }
             }
         },
-        shape = RoundedCornerShape(20.dp)
+        shape = RoundedCornerShape(20.dp),
+        modifier = Modifier.testTag("update_dialog")
     )
-}
-
-private fun installApk(context: Context, file: File) {
-    try {
-        val intent = Intent(Intent.ACTION_VIEW).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
-            val uri: Uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                try {
-                    androidx.core.content.FileProvider.getUriForFile(
-                        context,
-                        "${context.packageName}.fileprovider",
-                        file
-                    )
-                } catch (_: Exception) {
-                    Uri.fromFile(file)
-                }
-            } else {
-                Uri.fromFile(file)
-            }
-            setDataAndType(uri, "application/vnd.android.package-archive")
-        }
-        context.startActivity(intent)
-    } catch (e: Exception) {
-        e.printStackTrace()
-    }
 }

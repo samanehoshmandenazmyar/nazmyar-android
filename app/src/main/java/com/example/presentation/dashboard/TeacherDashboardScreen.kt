@@ -34,9 +34,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import com.example.core.banner.BannerManager
 import com.example.domain.model.User
 import com.example.presentation.components.BehaviorRecordCard
+import com.example.presentation.components.HomeBannerCarousel
 import com.example.presentation.components.NezamYarHeader
+import com.example.presentation.components.PtaElectionHomeBanner
 import com.example.presentation.viewmodel.MainViewModel
 import com.example.ui.theme.IncidentRed
 import com.example.ui.theme.OnSchoolBlueContainer
@@ -52,8 +58,17 @@ fun TeacherDashboardScreen(
     onNavigateToDisciplinary: () -> Unit,
     onNavigateToStudents: () -> Unit,
     onNavigateToNotifications: () -> Unit,
+    onNavigateToPtaVoting: () -> Unit = {},
     onMenuClick: () -> Unit = {}
 ) {
+    val context = LocalContext.current
+    LaunchedEffect(Unit) {
+        BannerManager.init(context)
+    }
+    val allBanners by BannerManager.banners.collectAsState()
+    val teacherBanners = remember(allBanners, user) {
+        BannerManager.getBannersForUser(user)
+    }
     val classes by mainViewModel.classes.collectAsState()
     val records by mainViewModel.records.collectAsState()
     val notifications by mainViewModel.notifications.collectAsState()
@@ -102,6 +117,25 @@ fun TeacherDashboardScreen(
                     }
                 }
             }
+        }
+
+        // 16:9 Auto-sliding Home Banners Carousel
+        if (teacherBanners.isNotEmpty()) {
+            item {
+                HomeBannerCarousel(
+                    banners = teacherBanners,
+                    canManage = false,
+                    modifier = Modifier.padding(vertical = 4.dp)
+                )
+            }
+        }
+
+        // گزینه موقت: انتخاب انجمن و اولیا و مربیان
+        item {
+            PtaElectionHomeBanner(
+                onClick = onNavigateToPtaVoting,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+            )
         }
 
         // Quick Register Actions
@@ -193,7 +227,7 @@ fun TeacherDashboardScreen(
                                     }
                                     Spacer(modifier = Modifier.height(6.dp))
                                     Text(
-                                        text = "مشاهده دانش‌آموزان",
+                                        text = "مشاهده مخاطب‌ها",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
