@@ -18,6 +18,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Badge
@@ -71,10 +73,15 @@ import com.example.presentation.components.PtaElectionHomeBanner
 import com.example.presentation.components.StudentRankBadge
 import com.example.presentation.viewmodel.MainViewModel
 import com.example.ui.theme.IncidentRed
+import com.example.ui.theme.IncidentRedContainer
+import com.example.ui.theme.OnIncidentRedContainer
+import com.example.ui.theme.OnPositiveGreenContainer
+import com.example.ui.theme.OnSchoolBlueContainer
 import com.example.ui.theme.PositiveGreen
 import com.example.ui.theme.PositiveGreenContainer
 import com.example.ui.theme.SchoolBlueContainer
 import com.example.ui.theme.SchoolBluePrimary
+import com.example.ui.theme.VazirmatnFontFamily
 
 @Composable
 fun StudentDashboardScreen(
@@ -87,6 +94,7 @@ fun StudentDashboardScreen(
     onNavigateToReports: () -> Unit = {},
     onNavigateToStudents: () -> Unit = {},
     onNavigateToPtaVoting: () -> Unit = {},
+    onNavigateToReportCard: () -> Unit = {},
     onMenuClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -284,6 +292,64 @@ fun StudentDashboardScreen(
                 onClick = onNavigateToPtaVoting,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
             )
+        }
+
+        // دریافت کارنامه تحصیلی رسمی
+        item {
+            Card(
+                onClick = onNavigateToReportCard,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 6.dp)
+                    .testTag("student_home_report_card_banner"),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = SchoolBlueContainer.copy(alpha = 0.55f)),
+                border = BorderStroke(1.2.dp, SchoolBluePrimary.copy(alpha = 0.4f))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(SchoolBluePrimary),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Description,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "دریافت کارنامه تحصیلی",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = OnSchoolBlueContainer
+                            )
+                            Text(
+                                text = "مشاهده و دانلود کارنامه رسمی نمرات (JPG و PDF)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = OnSchoolBlueContainer.copy(alpha = 0.85f)
+                            )
+                        }
+                    }
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = null,
+                        tint = SchoolBluePrimary
+                    )
+                }
+            }
         }
 
         // Promoted Rank Celebration Banner
@@ -582,24 +648,49 @@ fun StudentDashboardScreen(
                             Spacer(modifier = Modifier.width(10.dp))
                             Column {
                                 Text(
-                                    text = "نمره و رتبه انضباطی",
+                                    text = "خلاصه کارکرد رفتاری",
                                     style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    text = "نیم‌سال اول تحصیلی",
+                                    text = "نیم‌سال تحصیلی جاری",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
 
-                        Text(
-                            text = "${currentScore.toPersianDigits()} / ۱۰۰",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = if (currentScore >= 90) PositiveGreen else if (currentScore >= 80) Color(0xFFD97706) else Color(0xFFDC2626)
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = PositiveGreenContainer
+                            ) {
+                                Text(
+                                    text = "${currentStudent?.positiveCount?.toPersianDigits() ?: 0}+  مثبت",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = OnPositiveGreenContainer,
+                                    fontFamily = VazirmatnFontFamily,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
+                                )
+                            }
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = IncidentRedContainer
+                            ) {
+                                Text(
+                                    text = "${currentStudent?.disciplinaryCount?.toPersianDigits() ?: 0}-  منفی",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = OnIncidentRedContainer,
+                                    fontFamily = VazirmatnFontFamily,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
+                                )
+                            }
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(12.dp))
@@ -607,25 +698,25 @@ fun StudentDashboardScreen(
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(10.dp),
-                        color = if (currentScore >= 90) Color(0xFFF0FDF4) else if (currentScore >= 80) Color(0xFFFFFBEB) else Color(0xFFFEF2F2)
+                        color = Color(0xFFF0FDF4)
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
-                                imageVector = if (currentScore >= 90) Icons.Default.Star else Icons.Default.VerifiedUser,
+                                imageVector = Icons.Default.CheckCircle,
                                 contentDescription = null,
-                                tint = if (currentScore >= 90) PositiveGreen else if (currentScore >= 80) Color(0xFFD97706) else Color(0xFFDC2626),
+                                tint = PositiveGreen,
                                 modifier = Modifier.size(18.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = if (currentScore >= 90) "وضعیت انضباطی شما در عالی‌ترین سطح است. برای کسب امتیازهای ویژه به رفتارهای مثبت ادامه دهید."
-                                else if (currentScore >= 80) "وضعیت انضباطی شما خوب است. با فعالیت‌های مثبت امتیاز خود را ارتقا دهید."
-                                else "توجه: مواردی برای شما ثبت شده است. لطفاً جهت بهبود نمره انضباط دقت بیشتری بفرمایید.",
+                                text = if ((currentStudent?.disciplinaryCount ?: 0) == 0) "وضعیت رفتاری شما در عالی‌ترین سطح قرار دارد."
+                                else "تعداد ${(currentStudent?.disciplinaryCount ?: 0).toPersianDigits()} مورد منفی برای شما ثبت گردیده است.",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = if (currentScore >= 90) Color(0xFF166534) else if (currentScore >= 80) Color(0xFF92400E) else Color(0xFF991B1B)
+                                color = Color(0xFF166534),
+                                fontFamily = VazirmatnFontFamily
                             )
                         }
                     }

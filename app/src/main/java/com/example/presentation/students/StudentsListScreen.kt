@@ -71,10 +71,23 @@ import androidx.compose.material.icons.filled.School
 import androidx.compose.runtime.mutableIntStateOf
 import com.example.ui.theme.PositiveGreen
 import kotlin.random.Random
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.HowToReg
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.unit.sp
 import com.example.data.demo.DemoData
 import com.example.data.demo.AllowedStudentsRegistry
 import com.example.domain.model.User
 import com.example.domain.model.UserRole
+import com.example.domain.model.isValidPhoneNumber
 import com.example.domain.model.toPersianDigits
 import com.example.domain.model.toUser
 import com.example.presentation.components.NezamYarHeader
@@ -105,6 +118,8 @@ fun StudentsListScreen(
 
     var selectedTabIndex by remember { mutableIntStateOf(0) } // 0: دانش‌آموزان, 1: افراد ویژه
     var showAddStudentDialog by remember { mutableStateOf(false) }
+    var selectedStaffUser by remember { mutableStateOf<User?>(null) }
+    var selectedStaffMatchingStudent by remember { mutableStateOf<com.example.domain.model.Student?>(null) }
 
     // Initial on-mount refresh
     LaunchedEffect(Unit) {
@@ -112,6 +127,19 @@ fun StudentsListScreen(
     }
 
     val allUsers by authViewModel.allUsers.collectAsState()
+
+    val filteredStudents = remember(students, searchQuery, selectedGrade) {
+        students.filter { s ->
+            val matchesQuery = searchQuery.isBlank() ||
+                s.fullName.contains(searchQuery, ignoreCase = true) ||
+                s.studentCode.contains(searchQuery) ||
+                s.nationalId.contains(searchQuery)
+
+            val matchesGrade = MainViewModel.matchesGradeAndClassFilter(s, selectedGrade)
+
+            matchesQuery && matchesGrade
+        }
+    }
 
     // Special individuals list: explicitly includes Mehdi Faryabi, Yasin Darahki, Creator,
     // and ONLY users/students who have a rank OTHER THAN "دانش‌آموز", "پدر دانش‌آموز", or "مادر دانش‌آموز"
@@ -149,13 +177,18 @@ fun StudentsListScreen(
         if (faryabi != null) list.add(faryabi)
         if (dorahaki != null) list.add(dorahaki)
 
-        // 2. All other registered users whose rank is other than student / father / mother
+        // 2. All other registered users whose role is staff or whose rank is special
         sourceUsers.forEach { u ->
             val isDesignated = (u.id == faryabi?.id || u.id == dorahaki?.id || u.id == creator?.id)
             if (!isDesignated) {
+                val isStaff = u.role == UserRole.MANAGER ||
+                    u.role == UserRole.VICE_PRINCIPAL ||
+                    u.role == UserRole.COUNSELOR ||
+                    u.role == UserRole.TEACHER ||
+                    u.isCreator
                 val hasSpecialRank = !isExcludedBaseRank(u.rankTitle) ||
                     u.extraRanks.any { !isExcludedBaseRank(it) }
-                if (hasSpecialRank) {
+                if (isStaff || hasSpecialRank) {
                     list.add(u)
                 }
             }
@@ -180,6 +213,8 @@ fun StudentsListScreen(
             specialUsers.filter { u ->
                 u.name.contains(searchQuery, ignoreCase = true) ||
                 u.studentCode.contains(searchQuery) ||
+                u.rankTitle.contains(searchQuery, ignoreCase = true) ||
+                u.extraRanks.any { it.contains(searchQuery, ignoreCase = true) } ||
                 u.role.farsiTitle.contains(searchQuery, ignoreCase = true) ||
                 u.email.contains(searchQuery, ignoreCase = true) ||
                 u.phone.contains(searchQuery)
@@ -353,7 +388,7 @@ fun StudentsListScreen(
                 }
             }
 
-            // Grade Filter Chips (Only relevant for Students tab)
+            // Grade & Status Filter Chips (Only relevant for Students tab)
             if (selectedTabIndex == 0) {
                 item {
                     Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
@@ -379,6 +414,7 @@ fun StudentsListScreen(
                                 )
                             }
                         }
+
                     }
                 }
             }
@@ -399,7 +435,7 @@ fun StudentsListScreen(
                     )
                     Text(
                         text = if (selectedTabIndex == 0) {
-                            "${students.size.toPersianDigits()} مخاطب"
+                            "${filteredStudents.size.toPersianDigits()} مخاطب"
                         } else {
                             "${filteredSpecialUsers.size.toPersianDigits()} نفر"
                         },
@@ -411,7 +447,7 @@ fun StudentsListScreen(
 
             if (selectedTabIndex == 0) {
                 // STUDENTS TAB
-                if (students.isEmpty()) {
+                if (filteredStudents.isEmpty()) {
                     item {
                         Card(
                             modifier = Modifier
@@ -428,7 +464,7 @@ fun StudentsListScreen(
                                 verticalArrangement = Arrangement.Center
                             ) {
                                 Text(
-                                    text = "هنوز هیچ دانش‌آموزی در سامانه ثبت نشده است.",
+                                    text = "دانش‌آموزی با این مشخصات یافت نشد.",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -446,7 +482,7 @@ fun StudentsListScreen(
                     }
                 } else {
                     // Student Cards
-                    items(students, key = { it.id }) { student ->
+                    items(filteredStudents, key = { it.id }) { student ->
                         StudentListItemCard(
                             student = student,
                             allUsers = allUsers,
@@ -493,11 +529,8 @@ fun StudentsListScreen(
                             allUsers = allUsers,
                             matchingStudent = matchingStudent,
                             onClick = {
-                                if (matchingStudent != null) {
-                                    onStudentClick(matchingStudent.id)
-                                } else if (user.isCreator) {
-                                    onStudentClick(user.id)
-                                }
+                                selectedStaffUser = user
+                                selectedStaffMatchingStudent = matchingStudent
                             },
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
                         )
@@ -511,10 +544,36 @@ fun StudentsListScreen(
         }
     }
 
+    if (selectedStaffUser != null) {
+        StaffProfileDialog(
+            user = selectedStaffUser!!,
+            matchingStudent = selectedStaffMatchingStudent,
+            onDismiss = {
+                selectedStaffUser = null
+                selectedStaffMatchingStudent = null
+            },
+            onNavigateToStudentProfile = { studentId ->
+                selectedStaffUser = null
+                selectedStaffMatchingStudent = null
+                onStudentClick(studentId)
+            }
+        )
+    }
+
     if (showAddStudentDialog) {
         AddStudentDialog(
             onDismiss = { showAddStudentDialog = false },
-            onAdd = { firstName, lastName, grade, className, code, phone, email, password ->
+            onAddPending = { firstName, lastName, grade, className ->
+                mainViewModel.addPendingStudent(
+                    firstName = firstName,
+                    lastName = lastName,
+                    grade = grade,
+                    className = className
+                ) {
+                    showAddStudentDialog = false
+                }
+            },
+            onAddFull = { firstName, lastName, grade, className, code, phone, email, password ->
                 mainViewModel.addNewStudent(
                     firstName = firstName,
                     lastName = lastName,
@@ -536,12 +595,14 @@ fun StudentsListScreen(
 @Composable
 fun AddStudentDialog(
     onDismiss: () -> Unit,
-    onAdd: (firstName: String, lastName: String, grade: String, className: String, code: String, phone: String, email: String, password: String) -> Unit
+    onAddPending: (firstName: String, lastName: String, grade: String, className: String) -> Unit,
+    onAddFull: (firstName: String, lastName: String, grade: String, className: String, code: String, phone: String, email: String, password: String) -> Unit
 ) {
+    var selectedMode by remember { mutableIntStateOf(0) } // 0: در انتظار ورود (فقط نام و نام خانوادگی), 1: ثبت‌نام کامل (دارای حساب)
     var firstName by remember { mutableStateOf("") }
     var lastName by remember { mutableStateOf("") }
-    val classOptions = listOf("هفتم یک", "هفتم دو", "هشتم یک", "هشتم دو", "نهم یک", "نهم دو")
-    var selectedGradeClass by remember { mutableStateOf("هفتم یک") }
+    val classOptions = listOf("کلاس 7/1", "کلاس 7/2", "کلاس 8/1", "کلاس 8/2", "کلاس 9/1", "کلاس 9/2")
+    var selectedGradeClass by remember { mutableStateOf("کلاس 7/1") }
     var code by remember { mutableStateOf(Random.nextInt(100000, 999999).toString()) }
     var phone by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
@@ -554,22 +615,135 @@ fun AddStudentDialog(
         code = Random.nextInt(100000, 999999).toString()
     }
 
+    val (g, c) = when (selectedGradeClass) {
+        "کلاس 7/1" -> Pair("پایه هفتم", "کلاس 7/1")
+        "کلاس 7/2" -> Pair("پایه هفتم", "کلاس 7/2")
+        "کلاس 8/1" -> Pair("پایه هشتم", "کلاس 8/1")
+        "کلاس 8/2" -> Pair("پایه هشتم", "کلاس 8/2")
+        "کلاس 9/1" -> Pair("پایه نهم", "کلاس 9/1")
+        "کلاس 9/2" -> Pair("پایه نهم", "کلاس 9/2")
+        else -> Pair("پایه هفتم", "کلاس 7/1")
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Text(
-                text = "افزودن و ثبت‌نام دانش‌آموز جدید",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = "افزودن دانش‌آموز جدید",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = VazirmatnFontFamily
+                )
+                Text(
+                    text = "نوع افزودن دانش‌آموز به سامانه را انتخاب کنید:",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontFamily = VazirmatnFontFamily
+                )
+            }
         },
         text = {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                // Mode Selector Cards
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Mode 0: Pending / Unregistered (Name only)
+                    Surface(
+                        onClick = {
+                            selectedMode = 0
+                            errorMessage = null
+                        },
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (selectedMode == 0) SchoolBluePrimary.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                        border = BorderStroke(
+                            width = if (selectedMode == 0) 1.8.dp else 1.dp,
+                            color = if (selectedMode == 0) SchoolBluePrimary else MaterialTheme.colorScheme.outlineVariant
+                        ),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(10.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PersonAdd,
+                                contentDescription = null,
+                                tint = if (selectedMode == 0) SchoolBluePrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Text(
+                                text = "در انتظار ورود",
+                                style = MaterialTheme.typography.labelMedium.copy(
+                                    fontFamily = VazirmatnFontFamily,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (selectedMode == 0) SchoolBluePrimary else MaterialTheme.colorScheme.onSurface
+                                )
+                            )
+                            Text(
+                                text = "فقط نام و نام خانوادگی",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontFamily = VazirmatnFontFamily,
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            )
+                        }
+                    }
+
+                    // Mode 1: Full Direct Registration
+                    Surface(
+                        onClick = {
+                            selectedMode = 1
+                            errorMessage = null
+                        },
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (selectedMode == 1) SchoolBluePrimary.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                        border = BorderStroke(
+                            width = if (selectedMode == 1) 1.8.dp else 1.dp,
+                            color = if (selectedMode == 1) SchoolBluePrimary else MaterialTheme.colorScheme.outlineVariant
+                        ),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(10.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.HowToReg,
+                                contentDescription = null,
+                                tint = if (selectedMode == 1) SchoolBluePrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Text(
+                                text = "ورودیافته (حساب کامل)",
+                                style = MaterialTheme.typography.labelMedium.copy(
+                                    fontFamily = VazirmatnFontFamily,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (selectedMode == 1) SchoolBluePrimary else MaterialTheme.colorScheme.onSurface
+                                )
+                            )
+                            Text(
+                                text = "با مشخصات و رمز ورود",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontFamily = VazirmatnFontFamily,
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            )
+                        }
+                    }
+                }
+
                 if (errorMessage != null) {
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
@@ -579,228 +753,242 @@ fun AddStudentDialog(
                         Text(
                             text = errorMessage ?: "",
                             color = Color(0xFFC62828),
-                            style = MaterialTheme.typography.bodySmall,
+                            style = MaterialTheme.typography.bodySmall.copy(fontFamily = VazirmatnFontFamily),
                             modifier = Modifier.padding(8.dp)
                         )
                     }
                 }
 
-                Text(
-                    text = "اطلاعات زیر دقیقاً مشابه فرم ثبت‌نام ثبت خواهد شد و دانش‌آموز می‌تواند بلافاصله با همین مشخصات وارد برنامه شود:",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                // Grade & Class
-                Text(
-                    text = "پایه و کلاس دانش‌آموز:",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(classOptions) { opt ->
-                        FilterChip(
-                            selected = selectedGradeClass == opt,
-                            onClick = { selectedGradeClass = opt },
-                            label = { Text(opt) }
-                        )
+                if (selectedMode == 0) {
+                    // MODE 0: UNREGISTERED / PENDING (NAME ONLY)
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = Color(0xFFFEF3C7),
+                        border = BorderStroke(0.5.dp, Color(0xFFF59E0B)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Info,
+                                contentDescription = null,
+                                tint = Color(0xFFB45309),
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                text = "در این حالت دانش‌آموز با عنوان «افزوده‌شده توسط مدرسه (در انتظار ورود)» در مخاطبان اضافه می‌شود و فقط نیاز به نام و نام خانوادگی دارد.",
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    fontFamily = VazirmatnFontFamily,
+                                    color = Color(0xFF78350F),
+                                    fontSize = 11.sp
+                                )
+                            )
+                        }
                     }
+
+                    // Grade & Class
+                    Text(
+                        text = "پایه و کلاس دانش‌آموز:",
+                        style = MaterialTheme.typography.labelMedium.copy(fontFamily = VazirmatnFontFamily),
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        items(classOptions) { opt ->
+                            FilterChip(
+                                selected = selectedGradeClass == opt,
+                                onClick = { selectedGradeClass = opt },
+                                label = { Text(opt, fontFamily = VazirmatnFontFamily) }
+                            )
+                        }
+                    }
+
+                    // First Name
+                    OutlinedTextField(
+                        value = firstName,
+                        onValueChange = {
+                            firstName = it.replace("دانش‌آموز", "").replace("دانش آموز", "")
+                            errorMessage = null
+                        },
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = VazirmatnFontFamily),
+                        label = { Text("نام دانش‌آموز", fontFamily = VazirmatnFontFamily) },
+                        placeholder = { Text("مثال: علی", fontFamily = VazirmatnFontFamily) },
+                        leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = SchoolBluePrimary) },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth().testTag("add_pending_student_fname")
+                    )
+
+                    // Last Name
+                    OutlinedTextField(
+                        value = lastName,
+                        onValueChange = {
+                            lastName = it.replace("دانش‌آموز", "").replace("دانش آموز", "")
+                            errorMessage = null
+                        },
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = VazirmatnFontFamily),
+                        label = { Text("نام خانوادگی", fontFamily = VazirmatnFontFamily) },
+                        placeholder = { Text("مثال: رضایی", fontFamily = VazirmatnFontFamily) },
+                        leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = SchoolBluePrimary) },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth().testTag("add_pending_student_lname")
+                    )
+                } else {
+                    // MODE 1: FULL DIRECT REGISTRATION
+                    Text(
+                        text = "پایه و کلاس دانش‌آموز:",
+                        style = MaterialTheme.typography.labelMedium.copy(fontFamily = VazirmatnFontFamily),
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        items(classOptions) { opt ->
+                            FilterChip(
+                                selected = selectedGradeClass == opt,
+                                onClick = { selectedGradeClass = opt },
+                                label = { Text(opt, fontFamily = VazirmatnFontFamily) }
+                            )
+                        }
+                    }
+
+                    // First Name
+                    OutlinedTextField(
+                        value = firstName,
+                        onValueChange = {
+                            firstName = it.replace("دانش‌آموز", "").replace("دانش آموز", "")
+                            errorMessage = null
+                        },
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = VazirmatnFontFamily),
+                        label = { Text("نام دانش‌آموز", fontFamily = VazirmatnFontFamily) },
+                        placeholder = { Text("مثال: علی", fontFamily = VazirmatnFontFamily) },
+                        leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = SchoolBluePrimary) },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth().testTag("add_student_fname")
+                    )
+
+                    // Last Name
+                    OutlinedTextField(
+                        value = lastName,
+                        onValueChange = {
+                            lastName = it.replace("دانش‌آموز", "").replace("دانش آموز", "")
+                            errorMessage = null
+                        },
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = VazirmatnFontFamily),
+                        label = { Text("نام خانوادگی (اختیاری)", fontFamily = VazirmatnFontFamily) },
+                        placeholder = { Text("مثال: رضایی", fontFamily = VazirmatnFontFamily) },
+                        leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = SchoolBluePrimary) },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth().testTag("add_student_lname")
+                    )
+
+                    // Student Code with 🔄 button
+                    OutlinedTextField(
+                        value = if (code.isNotEmpty()) code.toPersianDigits() else "",
+                        onValueChange = {},
+                        readOnly = true,
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = VazirmatnFontFamily),
+                        label = { Text("کد دانش‌آموزی ۶ رقمی (سیستمی)", fontFamily = VazirmatnFontFamily) },
+                        leadingIcon = { Icon(Icons.Default.Badge, contentDescription = null, tint = SchoolBluePrimary) },
+                        trailingIcon = {
+                            IconButton(onClick = { generateCode() }) {
+                                Icon(Icons.Default.Refresh, contentDescription = "تولید مجدد کد", tint = SchoolBluePrimary)
+                            }
+                        },
+                        supportingText = {
+                            Text(
+                                text = "کد ورود: $code (برای تغییر، دکمه بازتولید را لمس کنید)",
+                                style = MaterialTheme.typography.bodySmall.copy(fontFamily = VazirmatnFontFamily)
+                            )
+                        },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth().testTag("add_student_code")
+                    )
+
+                    // Phone
+                    OutlinedTextField(
+                        value = phone,
+                        onValueChange = {
+                            phone = it
+                            errorMessage = null
+                        },
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = VazirmatnFontFamily),
+                        label = { Text("شماره تماس اولیاء", fontFamily = VazirmatnFontFamily) },
+                        placeholder = { Text("مثال: 09123456789", fontFamily = VazirmatnFontFamily) },
+                        leadingIcon = { Icon(Icons.Default.Phone, contentDescription = null, tint = SchoolBluePrimary) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth().testTag("add_student_phone")
+                    )
+
+                    // Email (Optional)
+                    OutlinedTextField(
+                        value = email,
+                        onValueChange = { email = it },
+                        label = { Text("ایمیل (اختیاری)", fontFamily = VazirmatnFontFamily) },
+                        placeholder = { Text("جهت بازیابی رمز عبور", fontFamily = VazirmatnFontFamily) },
+                        leadingIcon = { Icon(Icons.Default.Email, contentDescription = null, tint = SchoolBluePrimary) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth().testTag("add_student_email")
+                    )
+
+                    // Password
+                    OutlinedTextField(
+                        value = password,
+                        onValueChange = {
+                            password = it
+                            errorMessage = null
+                        },
+                        label = { Text("رمز عبور ورود دانش‌آموز", fontFamily = VazirmatnFontFamily) },
+                        placeholder = { Text("حداقل ۴ کاراکتر", fontFamily = VazirmatnFontFamily) },
+                        leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null, tint = SchoolBluePrimary) },
+                        trailingIcon = {
+                            IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                Icon(
+                                    imageVector = if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                    contentDescription = null
+                                )
+                            }
+                        },
+                        visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth().testTag("add_student_password")
+                    )
+
+                    // Confirm Password
+                    OutlinedTextField(
+                        value = confirmPassword,
+                        onValueChange = {
+                            confirmPassword = it
+                            errorMessage = null
+                        },
+                        label = { Text("تکرار رمز عبور", fontFamily = VazirmatnFontFamily) },
+                        leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null, tint = SchoolBluePrimary) },
+                        trailingIcon = {
+                            if (confirmPassword.isNotEmpty() && confirmPassword == password) {
+                                Icon(
+                                    imageVector = Icons.Default.CheckCircle,
+                                    contentDescription = "مطابقت دارد",
+                                    tint = PositiveGreen
+                                )
+                            }
+                        },
+                        visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth().testTag("add_student_confirm_password")
+                    )
                 }
-
-                // First Name
-                OutlinedTextField(
-                    value = firstName,
-                    onValueChange = {
-                        firstName = it.replace("دانش‌آموز", "").replace("دانش آموز", "")
-                        errorMessage = null
-                    },
-                    textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = VazirmatnFontFamily),
-                    label = {
-                        Text(
-                            text = "نام دانش‌آموز",
-                            style = MaterialTheme.typography.bodyMedium.copy(
-                                fontFamily = VazirmatnFontFamily,
-                                fontWeight = FontWeight.Light
-                            )
-                        )
-                    },
-                    placeholder = {
-                        Text(
-                            text = "مثال: علی",
-                            style = MaterialTheme.typography.bodyMedium.copy(
-                                fontFamily = VazirmatnFontFamily,
-                                fontWeight = FontWeight.Light
-                            )
-                        )
-                    },
-                    leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = SchoolBluePrimary) },
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth().testTag("add_student_fname")
-                )
-
-                // Last Name
-                OutlinedTextField(
-                    value = lastName,
-                    onValueChange = {
-                        lastName = it.replace("دانش‌آموز", "").replace("دانش آموز", "")
-                        errorMessage = null
-                    },
-                    textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = VazirmatnFontFamily),
-                    label = {
-                        Text(
-                            text = "نام خانوادگی (اختیاری)",
-                            style = MaterialTheme.typography.bodyMedium.copy(
-                                fontFamily = VazirmatnFontFamily,
-                                fontWeight = FontWeight.Light
-                            )
-                        )
-                    },
-                    placeholder = {
-                        Text(
-                            text = "مثال: رضایی",
-                            style = MaterialTheme.typography.bodyMedium.copy(
-                                fontFamily = VazirmatnFontFamily,
-                                fontWeight = FontWeight.Light
-                            )
-                        )
-                    },
-                    leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = SchoolBluePrimary) },
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth().testTag("add_student_lname")
-                )
-
-                // Student Code with 🔄 button
-                OutlinedTextField(
-                    value = if (code.isNotEmpty()) code.toPersianDigits() else "",
-                    onValueChange = {},
-                    readOnly = true,
-                    textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = VazirmatnFontFamily),
-                    label = {
-                        Text(
-                            text = "کد دانش‌آموزی ۶ رقمی (سیستمی)",
-                            style = MaterialTheme.typography.bodyMedium.copy(
-                                fontFamily = VazirmatnFontFamily,
-                                fontWeight = FontWeight.Light
-                            )
-                        )
-                    },
-                    leadingIcon = { Icon(Icons.Default.Badge, contentDescription = null, tint = SchoolBluePrimary) },
-                    trailingIcon = {
-                        IconButton(onClick = { generateCode() }) {
-                            Icon(Icons.Default.Refresh, contentDescription = "تولید مجدد کد", tint = SchoolBluePrimary)
-                        }
-                    },
-                    supportingText = {
-                        Text(
-                            text = "کد ورود: $code (برای تغییر، دکمه بازتولید را لمس کنید)",
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                fontFamily = VazirmatnFontFamily,
-                                fontWeight = FontWeight.Light
-                            )
-                        )
-                    },
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth().testTag("add_student_code")
-                )
-
-                // Phone
-                OutlinedTextField(
-                    value = phone,
-                    onValueChange = {
-                        phone = it
-                        errorMessage = null
-                    },
-                    textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = VazirmatnFontFamily),
-                    label = {
-                        Text(
-                            text = "شماره تماس",
-                            style = MaterialTheme.typography.bodyMedium.copy(
-                                fontFamily = VazirmatnFontFamily,
-                                fontWeight = FontWeight.Light
-                            )
-                        )
-                    },
-                    placeholder = {
-                        Text(
-                            text = "مثال: 09123456789",
-                            style = MaterialTheme.typography.bodyMedium.copy(
-                                fontFamily = VazirmatnFontFamily,
-                                fontWeight = FontWeight.Light
-                            )
-                        )
-                    },
-                    leadingIcon = { Icon(Icons.Default.Phone, contentDescription = null, tint = SchoolBluePrimary) },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth().testTag("add_student_phone")
-                )
-
-                // Email (Optional)
-                OutlinedTextField(
-                    value = email,
-                    onValueChange = { email = it },
-                    label = { Text("ایمیل (اختیاری)") },
-                    placeholder = { Text("جهت بازیابی رمز عبور") },
-                    leadingIcon = { Icon(Icons.Default.Email, contentDescription = null, tint = SchoolBluePrimary) },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth().testTag("add_student_email")
-                )
-
-                // Password
-                OutlinedTextField(
-                    value = password,
-                    onValueChange = {
-                        password = it
-                        errorMessage = null
-                    },
-                    label = { Text("رمز عبور ورود دانش‌آموز") },
-                    placeholder = { Text("حداقل ۴ کاراکتر") },
-                    leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null, tint = SchoolBluePrimary) },
-                    trailingIcon = {
-                        IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                            Icon(
-                                imageVector = if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                contentDescription = null
-                            )
-                        }
-                    },
-                    visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth().testTag("add_student_password")
-                )
-
-                // Confirm Password
-                OutlinedTextField(
-                    value = confirmPassword,
-                    onValueChange = {
-                        confirmPassword = it
-                        errorMessage = null
-                    },
-                    label = { Text("تکرار رمز عبور") },
-                    leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null, tint = SchoolBluePrimary) },
-                    trailingIcon = {
-                        if (confirmPassword.isNotEmpty() && confirmPassword == password) {
-                            Icon(
-                                imageVector = Icons.Default.CheckCircle,
-                                contentDescription = "مطابقت دارد",
-                                tint = PositiveGreen
-                            )
-                        }
-                    },
-                    visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth().testTag("add_student_confirm_password")
-                )
             }
         },
         confirmButton = {
@@ -810,45 +998,297 @@ fun AddStudentDialog(
                         errorMessage = "لطفاً نام دانش‌آموز را وارد کنید."
                         return@Button
                     }
-                    if (code.trim().length != 6 || !code.trim().all { it.isDigit() }) {
-                        errorMessage = "کد دانش‌آموزی باید یک عدد ۶ رقمی معتبر باشد."
-                        return@Button
-                    }
-                    if (phone.trim().isBlank()) {
-                        errorMessage = "لطفاً شماره تماس را وارد کنید."
-                        return@Button
-                    }
-                    if (password.trim().length < 4) {
-                        errorMessage = "رمز عبور باید حداقل ۴ رقم یا کاراکتر باشد."
-                        return@Button
-                    }
-                    if (password.trim() != confirmPassword.trim()) {
-                        errorMessage = "رمز عبور با تکرار آن مطابقت ندارد."
-                        return@Button
-                    }
 
-                    val (g, c) = when (selectedGradeClass) {
-                        "هفتم یک" -> Pair("پایه هفتم", "کلاس 7/1")
-                        "هفتم دو" -> Pair("پایه هفتم", "کلاس 7/2")
-                        "هشتم یک" -> Pair("پایه هشتم", "کلاس 8/1")
-                        "هشتم دو" -> Pair("پایه هشتم", "کلاس 8/2")
-                        "نهم یک" -> Pair("پایه نهم", "کلاس 9/1")
-                        "نهم دو" -> Pair("پایه نهم", "کلاس 9/2")
-                        else -> Pair("پایه هفتم", "کلاس 7/1")
+                    if (selectedMode == 0) {
+                        // Pending / Unregistered mode: Requires only first name and last name
+                        onAddPending(firstName, lastName, g, c)
+                    } else {
+                        // Full registration mode
+                        if (code.trim().length != 6 || !code.trim().all { it.isDigit() }) {
+                            errorMessage = "کد دانش‌آموزی باید یک عدد ۶ رقمی معتبر باشد."
+                            return@Button
+                        }
+                        if (phone.trim().isBlank()) {
+                            errorMessage = "لطفاً شماره تماس را وارد کنید."
+                            return@Button
+                        }
+                        if (password.trim().length < 4) {
+                            errorMessage = "رمز عبور باید حداقل ۴ رقم یا کاراکتر باشد."
+                            return@Button
+                        }
+                        if (password.trim() != confirmPassword.trim()) {
+                            errorMessage = "رمز عبور با تکرار آن مطابقت ندارد."
+                            return@Button
+                        }
+                        onAddFull(firstName, lastName, g, c, code, phone, email, password)
                     }
-                    onAdd(firstName, lastName, g, c, code, phone, email, password)
                 },
-                colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = SchoolBluePrimary),
+                colors = ButtonDefaults.buttonColors(containerColor = SchoolBluePrimary),
                 modifier = Modifier.testTag("confirm_add_student")
             ) {
-                Text("ثبت و ایجاد حساب")
+                Text(
+                    text = if (selectedMode == 0) "افزودن به مخاطبان" else "ثبت و ایجاد حساب",
+                    fontFamily = VazirmatnFontFamily,
+                    fontWeight = FontWeight.Bold
+                )
             }
         },
         dismissButton = {
             OutlinedButton(onClick = onDismiss) {
-                Text("انصراف")
+                Text("انصراف", fontFamily = VazirmatnFontFamily)
             }
         },
         shape = RoundedCornerShape(18.dp)
+    )
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun StaffProfileDialog(
+    user: User,
+    matchingStudent: com.example.domain.model.Student?,
+    onDismiss: () -> Unit,
+    onNavigateToStudentProfile: (String) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "اطلاعات و پنل فرد ویژه",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = VazirmatnFontFamily
+                )
+                IconButton(onClick = onDismiss) {
+                    Icon(Icons.Default.Clear, contentDescription = "بستن")
+                }
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                // Avatar
+                Box(
+                    modifier = Modifier
+                        .size(68.dp)
+                        .clip(CircleShape)
+                        .background(com.example.ui.theme.SchoolBlueContainer)
+                        .border(1.5.dp, SchoolBluePrimary, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = user.name.take(2).ifBlank { "فرد" },
+                        style = MaterialTheme.typography.headlineSmall.copy(
+                            fontFamily = VazirmatnFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            color = SchoolBluePrimary
+                        )
+                    )
+                }
+
+                // Name
+                Text(
+                    text = user.name,
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontFamily = VazirmatnFontFamily,
+                        fontWeight = FontWeight.Bold
+                    )
+                )
+
+                // Ranks / Role Badges
+                com.example.presentation.components.UserRankBadge(user = user, isLarge = true)
+
+                // Phone Number (ONLY if registered and non-blank)
+                if (user.phone.isValidPhoneNumber()) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Phone,
+                                contentDescription = null,
+                                tint = SchoolBluePrimary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Column {
+                                Text(
+                                    text = "شماره تماس همراه:",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontFamily = VazirmatnFontFamily,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                )
+                                Text(
+                                    text = user.phone.toPersianDigits(),
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        fontFamily = VazirmatnFontFamily,
+                                        fontWeight = FontWeight.Bold,
+                                        color = SchoolBluePrimary
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Teaching Subjects (ONLY if non-empty, otherwise DO NOT SHOW)
+                if (user.teachingSubjects.isNotEmpty()) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.School,
+                                    contentDescription = null,
+                                    tint = SchoolBluePrimary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "دروس تدریسی:",
+                                    style = MaterialTheme.typography.labelMedium.copy(
+                                        fontFamily = VazirmatnFontFamily,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                )
+                            }
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                user.teachingSubjects.forEach { subject ->
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = SchoolBluePrimary.copy(alpha = 0.12f),
+                                        border = BorderStroke(1.dp, SchoolBluePrimary.copy(alpha = 0.3f))
+                                    ) {
+                                        Text(
+                                            text = subject,
+                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                fontFamily = VazirmatnFontFamily,
+                                                fontWeight = FontWeight.Bold,
+                                                color = SchoolBluePrimary
+                                            ),
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Assigned Classes / Class Branches (ONLY if non-empty, otherwise DO NOT SHOW)
+                if (user.assignedClasses.isNotEmpty()) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Badge,
+                                    contentDescription = null,
+                                    tint = SchoolBluePrimary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "شعبه‌های کلاس‌های تحت تدریس:",
+                                    style = MaterialTheme.typography.labelMedium.copy(
+                                        fontFamily = VazirmatnFontFamily,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                )
+                            }
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                user.assignedClasses.forEach { cls ->
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = PositiveGreen.copy(alpha = 0.12f),
+                                        border = BorderStroke(1.dp, PositiveGreen.copy(alpha = 0.3f))
+                                    ) {
+                                        Text(
+                                            text = cls,
+                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                fontFamily = VazirmatnFontFamily,
+                                                fontWeight = FontWeight.Bold,
+                                                color = PositiveGreen
+                                            ),
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Bio / Description
+                if (user.bio.isNotBlank()) {
+                    Text(
+                        text = user.bio,
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontFamily = VazirmatnFontFamily,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    )
+                }
+
+                // Student linkage button (if user is also a student)
+                if (matchingStudent != null && user.role == UserRole.STUDENT) {
+                    Button(
+                        onClick = { onNavigateToStudentProfile(matchingStudent.id) },
+                        colors = ButtonDefaults.buttonColors(containerColor = SchoolBluePrimary),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "مشاهده پرونده و کارنامه دانش‌آموزی",
+                            fontFamily = VazirmatnFontFamily,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onDismiss,
+                colors = ButtonDefaults.buttonColors(containerColor = SchoolBluePrimary)
+            ) {
+                Text("متوجه شدم", fontFamily = VazirmatnFontFamily)
+            }
+        },
+        shape = RoundedCornerShape(20.dp)
     )
 }

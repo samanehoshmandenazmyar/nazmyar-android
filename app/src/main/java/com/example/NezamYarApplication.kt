@@ -10,6 +10,9 @@ class NezamYarApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         SessionManager.init(this)
+        com.example.core.auth.ParentAccessManager.init(this)
+        com.example.core.reportcard.ReportCardManager.init(this)
+        com.example.core.theme.ThemeManager.init(this)
         BannerManager.init(this)
         ClassMessengerManager.init(this)
         AppContainer.init(this)

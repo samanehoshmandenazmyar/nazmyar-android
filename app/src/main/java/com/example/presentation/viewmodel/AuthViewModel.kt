@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.core.di.AppContainer
 import com.example.domain.model.User
 import com.example.domain.model.UserRole
+import com.example.domain.model.isValidPhoneNumber
 import com.example.domain.repository.AuthRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -86,17 +87,21 @@ class AuthViewModel(
         val trimmedCode = studentCode.trim()
         val trimmedPass = password.trim()
 
+        val isStaff = (role == UserRole.MANAGER || role == UserRole.VICE_PRINCIPAL || role == UserRole.TEACHER || role == UserRole.COUNSELOR)
+
         if (trimmedName.isBlank()) {
             _uiState.value = AuthUiState.Error(if (role == UserRole.PARENT) "لطفاً نام فرزند دانش‌آموز خود را وارد کنید." else "لطفاً نام و نام خانوادگی خود را وارد کنید.")
             return
         }
-        if (trimmedCode.isBlank()) {
-            _uiState.value = AuthUiState.Error("لطفاً کد ۶ رقمی دانش‌آموزی را وارد کنید.")
-            return
-        }
-        if (trimmedCode.length != 6 || !trimmedCode.all { it.isDigit() }) {
-            _uiState.value = AuthUiState.Error("کد دانش‌آموزی باید یک عدد ۶ رقمی معتبر باشد.")
-            return
+        if (!isStaff) {
+            if (trimmedCode.isBlank()) {
+                _uiState.value = AuthUiState.Error("لطفاً کد ۶ رقمی دانش‌آموزی را وارد کنید.")
+                return
+            }
+            if (trimmedCode.length != 6 || !trimmedCode.all { it.isDigit() }) {
+                _uiState.value = AuthUiState.Error("کد دانش‌آموزی باید یک عدد ۶ رقمی معتبر باشد.")
+                return
+            }
         }
         if (trimmedPass.isBlank()) {
             _uiState.value = AuthUiState.Error("لطفاً رمز عبور را وارد کنید.")
@@ -148,14 +153,16 @@ class AuthViewModel(
             matched
         } else null
 
-        // بررسی یکتا بودن نام و جلوگیری از ثبت‌نام تکراری
+        // بررسی یکتا بودن نام و جلوگیری از ثبت‌نام تکراری (فقط برای کاربرانی که قبلاً ثبت‌نام و ورود نموده‌اند)
         val existingUsers = authRepository.getSavedUsers()
         val isDuplicate = existingUsers.any { u ->
-            com.example.data.demo.AllowedStudentsRegistry.normalize(u.name) == normInput ||
-            (matchedAllowed != null && com.example.data.demo.AllowedStudentsRegistry.findMatchingAllowedStudent(u.name)?.fullName == matchedAllowed.fullName)
+            u.hasLoggedIn && u.phone.isValidPhoneNumber() && (
+                com.example.data.demo.AllowedStudentsRegistry.normalize(u.name) == normInput ||
+                (matchedAllowed != null && com.example.data.demo.AllowedStudentsRegistry.findMatchingAllowedStudent(u.name)?.fullName == matchedAllowed.fullName)
+            )
         }
         if (isDuplicate) {
-            _uiState.value = AuthUiState.Error("کاربری با نام «$trimmedName» قبلاً در سامانه ثبت‌نام کرده است. با هر نام و نام خانوادگی فقط یک حساب مجاز است و امکان داشتن دو حساب با یک نام وجود ندارد.")
+            _uiState.value = AuthUiState.Error("حساب کاربری «$trimmedName» قبلاً فعال شده است. لطفاً جهت ورود از تب «ورود به سامانه» استفاده فرمایید.")
             return
         }
 

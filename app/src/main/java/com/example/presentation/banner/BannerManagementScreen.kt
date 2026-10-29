@@ -47,8 +47,10 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -99,10 +101,17 @@ fun BannerManagementScreen(
     user: User?,
     onBackClick: () -> Unit
 ) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
+    LaunchedEffect(Unit) {
+        BannerManager.init(context)
+        BannerManager.syncWithServer(context)
+    }
+
     val banners by BannerManager.banners.collectAsState()
+    val isSyncing by BannerManager.isSyncing.collectAsState()
 
     var showAddBottomSheet by remember { mutableStateOf(false) }
     var bannerToDelete by remember { mutableStateOf<HomeBanner?>(null) }
@@ -119,7 +128,7 @@ fun BannerManagementScreen(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "سایز ۱۶:۹، تفکیک پایه‌ها و لینک مستقیم",
+                            text = "ذخیره در سرور ابری، سایز ۱۶:۹ و تفکیک پایه‌ها",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -137,6 +146,30 @@ fun BannerManagementScreen(
                     }
                 },
                 actions = {
+                    IconButton(
+                        onClick = {
+                            scope.launch {
+                                BannerManager.syncWithServer(context)
+                                snackbarHostState.showSnackbar("همگام‌سازی بنرها با سرور انجام شد.")
+                            }
+                        },
+                        modifier = Modifier.testTag("sync_banners_button")
+                    ) {
+                        if (isSyncing) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = "همگام‌سازی با سرور",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
                     if (banners.isNotEmpty()) {
                         IconButton(
                             onClick = {
@@ -451,10 +484,13 @@ fun AddBannerBottomSheet(
     onDismiss: () -> Unit,
     onBannerAdded: (HomeBanner) -> Unit
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     var title by remember { mutableStateOf("") }
     var selectedImageUrl by remember { mutableStateOf("res:img_home_banner_olympiad") }
+    var isProcessingImage by remember { mutableStateOf(false) }
     var customUrlInput by remember { mutableStateOf("") }
     var linkUrl by remember { mutableStateOf("") }
 
@@ -466,7 +502,12 @@ fun AddBannerBottomSheet(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri: Uri? ->
         if (uri != null) {
-            selectedImageUrl = uri.toString()
+            scope.launch {
+                isProcessingImage = true
+                val encoded = BannerManager.compressAndEncodeImage(context, uri)
+                selectedImageUrl = encoded
+                isProcessingImage = false
+            }
         }
     }
 
@@ -514,13 +555,25 @@ fun AddBannerBottomSheet(
                     .aspectRatio(16f / 9f) // Strictly 16:9
                     .clip(RoundedCornerShape(14.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(14.dp))
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(14.dp)),
+                contentAlignment = Alignment.Center
             ) {
-                BannerImage(
-                    imageUrl = selectedImageUrl,
-                    contentDescription = "پیش‌نمایش بنر",
-                    modifier = Modifier.fillMaxSize()
-                )
+                if (isProcessingImage) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(28.dp), strokeWidth = 3.dp)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("در حال فشرده‌سازی و آماده‌سازی عکس بنر...", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                } else {
+                    BannerImage(
+                        imageUrl = selectedImageUrl,
+                        contentDescription = "پیش‌نمایش بنر",
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(12.dp))

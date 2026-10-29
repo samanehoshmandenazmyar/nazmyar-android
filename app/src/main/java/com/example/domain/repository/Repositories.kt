@@ -39,6 +39,7 @@ interface AuthRepository {
         className: String = "کلاس 7/1"
     ): Result<User>
     suspend fun recoverAccount(emailOrPhone: String): Result<User>
+    suspend fun deleteUser(userId: String): Result<Unit>
     suspend fun logout()
     fun getSavedUsers(): List<User>
     suspend fun updateUserProfile(updatedUser: User): Result<User>
@@ -67,12 +68,19 @@ interface StudentRepository {
     fun getCustomRanks(): Flow<List<com.example.domain.model.CustomRank>>
     suspend fun saveCustomRank(rank: com.example.domain.model.CustomRank): Result<Unit>
     suspend fun deleteCustomRank(rankId: String): Result<Unit>
+    suspend fun updateStudentFaceRegistration(
+        studentId: String,
+        frontUrl: String?,
+        leftUrl: String?,
+        rightUrl: String?
+    ): Result<Unit>
 }
 
 interface BehaviorRepository {
     fun getAllRecords(): Flow<List<BehaviorRecord>>
     fun getRecordsForStudent(studentId: String): Flow<List<BehaviorRecord>>
     suspend fun addRecord(record: BehaviorRecord): Result<Unit>
+    suspend fun deleteRecord(recordId: String): Result<Unit>
     fun getStats(): Flow<BehaviorStats>
 }
 

@@ -13,20 +13,28 @@ import androidx.compose.ui.unit.LayoutDirection
 
 private val DarkColorScheme = darkColorScheme(
     primary = SchoolBluePrimaryDark,
-    onPrimary = Color.Black,
-    primaryContainer = SchoolBlueDark,
-    onPrimaryContainer = Color.White,
+    onPrimary = Color(0xFF0B1120),
+    primaryContainer = Color(0xFF1E3A8A),
+    onPrimaryContainer = Color(0xFFDBEAFE),
     secondary = PositiveGreen,
-    onSecondary = Color.Black,
+    onSecondary = Color(0xFF0B1120),
+    secondaryContainer = Color(0xFF064E3B),
+    onSecondaryContainer = Color(0xFFA7F3D0),
     tertiary = WarningAmber,
+    onTertiary = Color(0xFF0B1120),
+    tertiaryContainer = Color(0xFF78350F),
+    onTertiaryContainer = Color(0xFFFDE68A),
     background = AppBackgroundDark,
     onBackground = TextPrimaryDark,
     surface = AppSurfaceDark,
     onSurface = TextPrimaryDark,
     surfaceVariant = AppSurfaceVariantDark,
     onSurfaceVariant = TextSecondaryDark,
+    outline = Color(0xFF475569),
     error = IncidentRed,
-    onError = Color.White
+    onError = Color.White,
+    errorContainer = Color(0xFF7F1D1D),
+    onErrorContainer = Color(0xFFFECACA)
 )
 
 private val LightColorScheme = lightColorScheme(
@@ -57,7 +65,7 @@ private val LightColorScheme = lightColorScheme(
 
 @Composable
 fun NezamYarTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    darkTheme: Boolean = com.example.core.theme.isAppInDarkTheme(),
     content: @Composable () -> Unit
 ) {
     val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme

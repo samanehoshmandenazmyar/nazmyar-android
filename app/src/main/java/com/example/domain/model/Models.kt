@@ -24,6 +24,7 @@ data class User(
     val schoolId: String,
     val active: Boolean = true,
     val assignedClasses: List<String> = emptyList(),
+    val teachingSubjects: List<String> = emptyList(),
     val childStudentIds: List<String> = emptyList(),
     val avatarInitials: String = name.take(2),
     val tag: String? = null,
@@ -40,13 +41,19 @@ data class User(
     val extraRanks: List<String> = emptyList(),
     val extraRankColors: List<String> = emptyList(),
     val nationalId: String = "",
-    val bio: String = ""
+    val bio: String = "",
+    val hasLoggedIn: Boolean = false,
+    val addedByStaff: Boolean = true,
+    val faceRegistered: Boolean = false,
+    val faceFrontUrl: String? = null,
+    val faceLeftUrl: String? = null,
+    val faceRightUrl: String? = null
 ) {
     val isCreator: Boolean
         get() = (id == "user_creator_hossein") ||
                 (studentCode == "454545" && name.trim() == "سید حسین موسوی نژاد") ||
                 (studentCode == "454545" && email.equals("hosseinvexter@gmail.com", ignoreCase = true)) ||
-                (phone == "09923072572") ||
+                (phone == "09923072572" || phone == "+989923072572") ||
                 (name.trim() == "سید حسین موسوی نژاد")
 
     val allRanks: List<String>
@@ -111,7 +118,13 @@ data class Student(
     val extraRanks: List<String> = emptyList(),
     val extraRankColors: List<String> = emptyList(),
     val bio: String = "",
-    val isRegistered: Boolean = false
+    val isRegistered: Boolean = false,
+    val hasLoggedIn: Boolean = false,
+    val addedByStaff: Boolean = true,
+    val faceRegistered: Boolean = false,
+    val faceFrontUrl: String? = null,
+    val faceLeftUrl: String? = null,
+    val faceRightUrl: String? = null
 ) {
     val allRanks: List<String>
         get() = (listOf(rankTitle) + extraRanks).filter { it.isNotBlank() }.distinct()
@@ -152,8 +165,8 @@ fun Student.toUser(): User {
             (fullName.trim() == "سید حسین موسوی نژاد") ||
             (parentPhone == "09923072572") ||
             (email.equals("hosseinvexter@gmail.com", ignoreCase = true))
-    val finalRole = if (isCreatorUser) UserRole.MANAGER else UserRole.STUDENT
-    val finalRank = if (isCreatorUser) "سازنده" else if (rankTitle == "سازنده") "دانش‌آموز" else rankTitle.ifBlank { "دانش‌آموز" }
+    val finalRole = if (isCreatorUser) UserRole.MANAGER else this.role
+    val finalRank = if (isCreatorUser) "سازنده" else if (rankTitle == "سازنده") this.role.farsiTitle else rankTitle.ifBlank { this.role.farsiTitle }
     val finalBadgeColor = if (isCreatorUser) 0xFF1E40AF else try {
         val hex = if (rankColorHex.startsWith("#")) rankColorHex else "#$rankColorHex"
         android.graphics.Color.parseColor(hex).toLong() and 0xFFFFFFFFL
@@ -180,7 +193,7 @@ fun Student.toUser(): User {
     return User(
         id = id,
         name = fullName,
-        phone = if (isCreatorUser) "09923072572" else parentPhone,
+        phone = if (isCreatorUser) "09923072572" else parentPhone.sanitizePhoneNumber(),
         email = email,
         role = finalRole,
         schoolId = schoolId,
@@ -189,7 +202,9 @@ fun Student.toUser(): User {
         password = password,
         gender = gender,
         isRegisteredUser = true,
-        tag = if (isCreatorUser) "سازنده" else if (hasGoodRank()) "دانش‌آموز برتر" else null,
+        hasLoggedIn = hasLoggedIn || isCreatorUser,
+        addedByStaff = addedByStaff,
+        tag = if (isCreatorUser) "سازنده" else if (hasGoodRank()) "دارای رنک ویژه" else null,
         rankTitle = finalRank,
         rankBadgeColorHex = finalBadgeColor,
         rankColorHex = finalColorHex,
@@ -199,7 +214,11 @@ fun Student.toUser(): User {
         extraRanks = extraRanks,
         extraRankColors = extraRankColors,
         nationalId = nationalId,
-        bio = bio
+        bio = bio,
+        faceRegistered = faceRegistered,
+        faceFrontUrl = faceFrontUrl,
+        faceLeftUrl = faceLeftUrl,
+        faceRightUrl = faceRightUrl
     )
 }
 
@@ -218,7 +237,7 @@ fun User.toStudent(grade: String = "پایه هفتم", className: String = "ک�
         gender = gender,
         schoolId = schoolId,
         score = 100,
-        parentPhone = phone,
+        parentPhone = phone.sanitizePhoneNumber(),
         email = email,
         password = password,
         role = role,
@@ -229,7 +248,14 @@ fun User.toStudent(grade: String = "پایه هفتم", className: String = "ک�
         extraRanks = extraRanks,
         extraRankColors = extraRankColors,
         nationalId = nationalId,
-        bio = bio
+        bio = bio,
+        isRegistered = true,
+        hasLoggedIn = hasLoggedIn,
+        addedByStaff = addedByStaff,
+        faceRegistered = faceRegistered,
+        faceFrontUrl = faceFrontUrl,
+        faceLeftUrl = faceLeftUrl,
+        faceRightUrl = faceRightUrl
     )
 }
 
@@ -270,6 +296,7 @@ data class BehaviorRecord(
     val updatedAt: Long = System.currentTimeMillis(),
     val parentNotified: Boolean = true,
     val attachments: List<String> = emptyList(),
+    val imageUrl: String? = null,
     val status: String = "تأیید شده"
 )
 
@@ -309,8 +336,8 @@ data class BehaviorStats(
 )
 
 data class AppUpdateInfo(
-    val versionCode: Int = 8,
-    val versionName: String = "1.0.7",
+    val versionCode: Int = 11,
+    val versionName: String = "1.1.2",
     val apkUrl: String = "",
     val updateMessage: String = "",
     val isForced: Boolean = false,
@@ -329,6 +356,39 @@ data class AppUpdateInfo(
 
 typealias UpdateInfo = AppUpdateInfo
 
+
+// Extension function to sanitize and validate phone numbers, formatting to +98
+fun String.sanitizePhoneNumber(): String {
+    val trimmed = this.trim()
+    if (trimmed.isBlank()) return ""
+    val hasLetters = trimmed.any { it in 'آ'..'ی' || it in 'a'..'z' || it in 'A'..'Z' }
+    if (hasLetters) return ""
+    // Convert Persian/Arabic digits to English digits
+    val englishDigits = trimmed.map { char ->
+        when (char) {
+            '۰' -> '0'; '۱' -> '1'; '۲' -> '2'; '۳' -> '3'; '۴' -> '4'
+            '۵' -> '5'; '۶' -> '6'; '۷' -> '7'; '۸' -> '8'; '۹' -> '9'
+            '٠' -> '0'; '١' -> '1'; '٢' -> '2'; '٣' -> '3'; '٤' -> '4'
+            '٥' -> '5'; '٦' -> '6'; '٧' -> '7'; '٨' -> '8'; '٩' -> '9'
+            else -> char
+        }
+    }.joinToString("")
+    val digitsOnly = englishDigits.filter { it.isDigit() }
+    if (digitsOnly.length < 5) return ""
+
+    return when {
+        digitsOnly.startsWith("989") && digitsOnly.length == 12 -> "+$digitsOnly"
+        digitsOnly.startsWith("09") && digitsOnly.length == 11 -> "+98${digitsOnly.substring(1)}"
+        digitsOnly.startsWith("9") && digitsOnly.length == 10 -> "+98$digitsOnly"
+        englishDigits.startsWith("+98") -> englishDigits
+        else -> if (digitsOnly.length >= 10) "+98${digitsOnly.takeLast(10)}" else englishDigits
+    }
+}
+
+fun String.isValidPhoneNumber(): Boolean {
+    val sanitized = this.sanitizePhoneNumber()
+    return sanitized.isNotBlank() && sanitized.filter { it.isDigit() }.length >= 7
+}
 
 // Extension function to convert English digits to Persian digits
 fun String.toPersianDigits(): String {

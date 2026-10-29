@@ -1,6 +1,7 @@
 package com.example.presentation.auth
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -25,20 +27,23 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
+import androidx.compose.material.icons.automirrored.filled.Login
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Badge
-import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Email
-import androidx.compose.material.icons.filled.HelpOutline
+import androidx.compose.material.icons.filled.FamilyRestroom
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.School
-import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
@@ -52,11 +57,9 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -70,6 +73,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -80,6 +85,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.core.theme.isAppInDarkTheme
 import com.example.domain.model.User
 import com.example.domain.model.UserRole
 import com.example.domain.model.toPersianDigits
@@ -98,7 +104,7 @@ fun LoginScreen(
     onLoginSuccess: () -> Unit
 ) {
     val uiState by authViewModel.uiState.collectAsState()
-    val savedUsers = authViewModel.savedUsers
+    val isDark = isAppInDarkTheme()
 
     // Tabs: 0 -> ورود (Login), 1 -> ثبت‌نام (Sign Up)
     var selectedTab by remember { mutableIntStateOf(0) }
@@ -118,8 +124,6 @@ fun LoginScreen(
     var regEmail by remember { mutableStateOf("") }
     var regPassword by remember { mutableStateOf("") }
     var regConfirmPassword by remember { mutableStateOf("") }
-    var regRole by remember { mutableStateOf(UserRole.STUDENT) }
-    var regGender by remember { mutableStateOf("پسر") }
     var regGradeClass by remember { mutableStateOf("هفتم یک") }
     var regPasswordVisible by remember { mutableStateOf(false) }
 
@@ -138,117 +142,277 @@ fun LoginScreen(
         }
     }
 
-    // Function to generate random 6-digit student code
     fun generateRandomStudentCode(): String {
         val code = Random.nextInt(100000, 999999).toString()
         regStudentCode = code
         return code
     }
 
+    // Dynamic color tokens for perfect light/dark adaptation
+    val cardBackground = if (isDark) Color(0xFF1E293B) else Color.White
+    val cardBorder = if (isDark) Color(0xFF334155) else Color(0xFFE2E8F0)
+    val inputBackground = if (isDark) Color(0xFF0F172A) else Color(0xFFF8FAFC)
+    val inputBorder = if (isDark) Color(0xFF334155) else Color(0xFFCBD5E1)
+    val titleTextColor = if (isDark) Color(0xFFF8FAFC) else Color(0xFF0F172A)
+    val subtitleTextColor = if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B)
+    val labelTextColor = if (isDark) Color(0xFFCBD5E1) else Color(0xFF475569)
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(
+                brush = Brush.verticalGradient(
+                    colors = if (isDark) {
+                        listOf(
+                            Color(0xFF0F172A),
+                            Color(0xFF0B1120),
+                            Color(0xFF020617)
+                        )
+                    } else {
+                        listOf(
+                            Color(0xFFE0E7FF).copy(alpha = 0.45f),
+                            Color(0xFFF8FAFC),
+                            Color(0xFFF1F5F9)
+                        )
+                    }
+                )
+            )
             .statusBarsPadding()
             .navigationBarsPadding()
             .imePadding()
     ) {
+        // Decorative ambient glow at top
+        Box(
+            modifier = Modifier
+                .size(320.dp)
+                .offset(y = (-110).dp)
+                .align(Alignment.TopCenter)
+                .clip(CircleShape)
+                .background(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            SchoolBluePrimary.copy(alpha = if (isDark) 0.22f else 0.14f),
+                            Color.Transparent
+                        )
+                    )
+                )
+        )
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(scrollState)
-                .padding(horizontal = 20.dp, vertical = 24.dp),
+                .padding(horizontal = 20.dp, vertical = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-            // School Logo & App Branding
-            Image(
-                painter = painterResource(id = com.example.R.drawable.app_icon),
-                contentDescription = "لوگوی سامانه نظمیار",
-                modifier = Modifier
-                    .size(80.dp)
-                    .clip(RoundedCornerShape(20.dp))
-            )
+            // School Logo in Glassmorphic Card Container
+            Surface(
+                shape = RoundedCornerShape(26.dp),
+                color = cardBackground,
+                shadowElevation = if (isDark) 4.dp else 8.dp,
+                border = BorderStroke(1.5.dp, cardBorder),
+                modifier = Modifier.size(92.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(10.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Image(
+                        painter = painterResource(id = com.example.R.drawable.app_icon),
+                        contentDescription = "لوگوی سامانه نظمیار",
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(18.dp))
+                    )
+                }
+            }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Subtitle Badge
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = if (isDark) SchoolBluePrimary.copy(alpha = 0.2f) else SchoolBluePrimary.copy(alpha = 0.08f),
+                border = BorderStroke(1.dp, SchoolBluePrimary.copy(alpha = if (isDark) 0.4f else 0.2f))
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Shield,
+                        contentDescription = null,
+                        tint = SchoolBluePrimary,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = "سامانه جامع آموزشی و انضباطی",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontFamily = VazirmatnFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            color = SchoolBluePrimary
+                        )
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
 
             Text(
                 text = "سامانه هوشمند نظمیار",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground
+                style = MaterialTheme.typography.headlineMedium.copy(
+                    fontFamily = VazirmatnFontFamily,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = titleTextColor,
+                    letterSpacing = (-0.5).sp
+                )
             )
 
             Spacer(modifier = Modifier.height(4.dp))
 
             Text(
                 text = "پرتال جامع احراز هویت، ثبت‌نام و مدیریت انضباطی",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall.copy(
+                    fontFamily = VazirmatnFontFamily,
+                    color = subtitleTextColor
+                ),
                 textAlign = TextAlign.Center
             )
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // Auth Card
+            // Main Auth Card
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("auth_card"),
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                shape = RoundedCornerShape(28.dp),
+                colors = CardDefaults.cardColors(containerColor = cardBackground),
+                elevation = CardDefaults.cardElevation(defaultElevation = if (isDark) 2.dp else 4.dp),
+                border = BorderStroke(1.dp, cardBorder)
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(20.dp)
+                        .padding(22.dp)
                 ) {
-                    // Navigation Tabs: ورود / ثبت‌نام
-                    TabRow(
-                        selectedTabIndex = selectedTab,
-                        containerColor = MaterialTheme.colorScheme.surface,
-                        contentColor = SchoolBluePrimary,
+                    // Modern Segmented Pill Switcher: ورود / ثبت‌نام
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = if (isDark) Color(0xFF0F172A) else Color(0xFFF1F5F9),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
+                            .height(52.dp)
+                            .padding(4.dp)
                     ) {
-                        Tab(
-                            selected = selectedTab == 0,
-                            onClick = {
-                                selectedTab = 0
-                                authViewModel.clearState()
-                            },
-                            text = {
-                                Text(
-                                    text = "ورود به سامانه",
-                                    fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal,
-                                    fontSize = 15.sp
-                                )
-                            },
-                            modifier = Modifier.testTag("tab_login")
-                        )
-                        Tab(
-                            selected = selectedTab == 1,
-                            onClick = {
-                                selectedTab = 1
-                                authViewModel.clearState()
-                                if (regStudentCode.isEmpty()) {
-                                    generateRandomStudentCode()
+                        Row(
+                            modifier = Modifier.fillMaxSize(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Login Tab Pill
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxSize()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(
+                                        if (selectedTab == 0) {
+                                            if (isDark) Color(0xFF334155) else Color.White
+                                        } else Color.Transparent
+                                    )
+                                    .then(
+                                        if (selectedTab == 0) {
+                                            Modifier.shadow(2.dp, RoundedCornerShape(12.dp))
+                                        } else Modifier
+                                    )
+                                    .clickable {
+                                        selectedTab = 0
+                                        authViewModel.clearState()
+                                    }
+                                    .testTag("tab_login"),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.Login,
+                                        contentDescription = null,
+                                        tint = if (selectedTab == 0) {
+                                            if (isDark) Color.White else SchoolBluePrimary
+                                        } else if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B),
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Text(
+                                        text = "ورود به سامانه",
+                                        style = MaterialTheme.typography.bodyMedium.copy(
+                                            fontFamily = VazirmatnFontFamily,
+                                            fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Medium,
+                                            color = if (selectedTab == 0) {
+                                                if (isDark) Color.White else SchoolBluePrimary
+                                            } else if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B)
+                                        )
+                                    )
                                 }
-                            },
-                            text = {
-                                Text(
-                                    text = "ثبت‌نام جدید",
-                                    fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal,
-                                    fontSize = 15.sp
-                                )
-                            },
-                            modifier = Modifier.testTag("tab_register")
-                        )
+                            }
+
+                            // Register Tab Pill
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxSize()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(
+                                        if (selectedTab == 1) {
+                                            if (isDark) Color(0xFF334155) else Color.White
+                                        } else Color.Transparent
+                                    )
+                                    .then(
+                                        if (selectedTab == 1) {
+                                            Modifier.shadow(2.dp, RoundedCornerShape(12.dp))
+                                        } else Modifier
+                                    )
+                                    .clickable {
+                                        selectedTab = 1
+                                        authViewModel.clearState()
+                                        if (regStudentCode.isEmpty()) {
+                                            generateRandomStudentCode()
+                                        }
+                                    }
+                                    .testTag("tab_register"),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.PersonAdd,
+                                        contentDescription = null,
+                                        tint = if (selectedTab == 1) {
+                                            if (isDark) Color.White else SchoolBluePrimary
+                                        } else if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B),
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Text(
+                                        text = "ثبت‌نام جدید",
+                                        style = MaterialTheme.typography.bodyMedium.copy(
+                                            fontFamily = VazirmatnFontFamily,
+                                            fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Medium,
+                                            color = if (selectedTab == 1) {
+                                                if (isDark) Color.White else SchoolBluePrimary
+                                            } else if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B)
+                                        )
+                                    )
+                                }
+                            }
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(20.dp))
@@ -259,74 +423,199 @@ fun LoginScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(bottom = 16.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            color = IncidentRedContainer
+                            shape = RoundedCornerShape(14.dp),
+                            color = IncidentRedContainer,
+                            border = BorderStroke(1.dp, Color(0xFFFECACA))
                         ) {
-                            Text(
-                                text = (uiState as? AuthUiState.Error)?.message.orEmpty(),
-                                color = OnIncidentRedContainer,
-                                style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.padding(12.dp)
-                            )
+                            Row(
+                                modifier = Modifier.padding(14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = null,
+                                    tint = OnIncidentRedContainer,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Text(
+                                    text = (uiState as? AuthUiState.Error)?.message.orEmpty(),
+                                    color = OnIncidentRedContainer,
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        fontFamily = VazirmatnFontFamily,
+                                        fontWeight = FontWeight.Medium
+                                    ),
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
                         }
                     }
 
+                    // ==========================================
                     // TAB 0: LOGIN FORM
+                    // ==========================================
                     if (selectedTab == 0) {
-                        Text(
-                            text = "مشخصات ورود به حساب کاربری",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
+                        // Section Header
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(4.dp, 16.dp)
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .background(SchoolBluePrimary)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "مشخصات ورود به حساب کاربری",
+                                style = MaterialTheme.typography.titleSmall.copy(
+                                    fontFamily = VazirmatnFontFamily,
+                                    fontWeight = FontWeight.Bold,
+                                    color = titleTextColor
+                                )
+                            )
+                        }
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
 
-                        // Role Selection: دانش‌آموز vs ولی دانش‌آموز
+                        // Role Selection: Card Pickers
                         Text(
                             text = "ورود به عنوان:",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontFamily = VazirmatnFontFamily,
+                                fontWeight = FontWeight.Bold,
+                                color = labelTextColor
+                            )
                         )
-                        Spacer(modifier = Modifier.height(6.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
+
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            FilterChip(
-                                selected = loginRole == UserRole.STUDENT,
-                                onClick = { loginRole = UserRole.STUDENT },
-                                label = { Text("دانش‌آموز") },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = SchoolBluePrimary.copy(alpha = 0.15f),
-                                    selectedLabelColor = SchoolBluePrimary
+                            // Student Role Card
+                            val isStudent = loginRole == UserRole.STUDENT
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = if (isStudent) SchoolBluePrimary.copy(alpha = if (isDark) 0.25f else 0.08f) else inputBackground,
+                                border = BorderStroke(
+                                    1.5.dp,
+                                    if (isStudent) SchoolBluePrimary else cardBorder
                                 ),
                                 modifier = Modifier
                                     .weight(1f)
+                                    .clickable { loginRole = UserRole.STUDENT }
                                     .testTag("login_role_student")
-                            )
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(vertical = 10.dp, horizontal = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.School,
+                                        contentDescription = null,
+                                        tint = if (isStudent) SchoolBluePrimary else subtitleTextColor,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "دانش‌آموز",
+                                        style = MaterialTheme.typography.bodySmall.copy(
+                                            fontFamily = VazirmatnFontFamily,
+                                            fontWeight = if (isStudent) FontWeight.Bold else FontWeight.Medium,
+                                            color = if (isStudent) (if (isDark) Color.White else SchoolBluePrimary) else labelTextColor,
+                                            fontSize = 12.sp
+                                        )
+                                    )
+                                }
+                            }
 
-                            FilterChip(
-                                selected = loginRole == UserRole.PARENT,
-                                onClick = { loginRole = UserRole.PARENT },
-                                label = { Text("ولی دانش‌آموز") },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = SchoolBluePrimary.copy(alpha = 0.15f),
-                                    selectedLabelColor = SchoolBluePrimary
+                            // Parent Role Card
+                            val isParent = loginRole == UserRole.PARENT
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = if (isParent) SchoolBluePrimary.copy(alpha = if (isDark) 0.25f else 0.08f) else inputBackground,
+                                border = BorderStroke(
+                                    1.5.dp,
+                                    if (isParent) SchoolBluePrimary else cardBorder
                                 ),
                                 modifier = Modifier
                                     .weight(1f)
+                                    .clickable { loginRole = UserRole.PARENT }
                                     .testTag("login_role_parent")
-                            )
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(vertical = 10.dp, horizontal = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.FamilyRestroom,
+                                        contentDescription = null,
+                                        tint = if (isParent) SchoolBluePrimary else subtitleTextColor,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "اولیاء",
+                                        style = MaterialTheme.typography.bodySmall.copy(
+                                            fontFamily = VazirmatnFontFamily,
+                                            fontWeight = if (isParent) FontWeight.Bold else FontWeight.Medium,
+                                            color = if (isParent) (if (isDark) Color.White else SchoolBluePrimary) else labelTextColor,
+                                            fontSize = 12.sp
+                                        )
+                                    )
+                                }
+                            }
+
+                            // Staff Role Card (ورود به عنوان کادر آموزشی)
+                            val isStaff = (loginRole == UserRole.MANAGER || loginRole == UserRole.VICE_PRINCIPAL || loginRole == UserRole.TEACHER || loginRole == UserRole.COUNSELOR)
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = if (isStaff) SchoolBluePrimary.copy(alpha = if (isDark) 0.25f else 0.08f) else inputBackground,
+                                border = BorderStroke(
+                                    1.5.dp,
+                                    if (isStaff) SchoolBluePrimary else cardBorder
+                                ),
+                                modifier = Modifier
+                                    .weight(1.3f)
+                                    .clickable { loginRole = UserRole.MANAGER }
+                                    .testTag("login_role_staff")
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(vertical = 10.dp, horizontal = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Shield,
+                                        contentDescription = null,
+                                        tint = if (isStaff) SchoolBluePrimary else subtitleTextColor,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "کادر آموزشی",
+                                        style = MaterialTheme.typography.bodySmall.copy(
+                                            fontFamily = VazirmatnFontFamily,
+                                            fontWeight = if (isStaff) FontWeight.Bold else FontWeight.Medium,
+                                            color = if (isStaff) (if (isDark) Color.White else SchoolBluePrimary) else labelTextColor,
+                                            fontSize = 12.sp
+                                        )
+                                    )
+                                }
+                            }
                         }
 
                         // Parent Relation: پدر vs مادر
                         if (loginRole == UserRole.PARENT) {
-                            Spacer(modifier = Modifier.height(10.dp))
+                            Spacer(modifier = Modifier.height(12.dp))
                             Text(
-                                text = "نسبت ولی:",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold
+                                text = "نسبت ولی گرامی:",
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    fontFamily = VazirmatnFontFamily,
+                                    fontWeight = FontWeight.Bold,
+                                    color = labelTextColor
+                                )
                             )
                             Spacer(modifier = Modifier.height(6.dp))
                             Row(
@@ -336,10 +625,27 @@ fun LoginScreen(
                                 FilterChip(
                                     selected = loginParentRelation == "پدر دانش‌آموز",
                                     onClick = { loginParentRelation = "پدر دانش‌آموز" },
-                                    label = { Text("پدر دانش‌آموز") },
+                                    label = {
+                                        Text(
+                                            text = "پدر دانش‌آموز",
+                                            modifier = Modifier.fillMaxWidth(),
+                                            textAlign = TextAlign.Center,
+                                            style = MaterialTheme.typography.bodySmall.copy(
+                                                fontFamily = VazirmatnFontFamily,
+                                                fontWeight = if (loginParentRelation == "پدر دانش‌آموز") FontWeight.Bold else FontWeight.Normal
+                                            )
+                                        )
+                                    },
+                                    shape = RoundedCornerShape(12.dp),
                                     colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = SchoolBluePrimary.copy(alpha = 0.15f),
-                                        selectedLabelColor = SchoolBluePrimary
+                                        selectedContainerColor = SchoolBluePrimary.copy(alpha = if (isDark) 0.3f else 0.12f),
+                                        selectedLabelColor = if (isDark) Color.White else SchoolBluePrimary,
+                                        containerColor = inputBackground,
+                                        labelColor = labelTextColor
+                                    ),
+                                    border = BorderStroke(
+                                        1.dp,
+                                        if (loginParentRelation == "پدر دانش‌آموز") SchoolBluePrimary else cardBorder
                                     ),
                                     modifier = Modifier
                                         .weight(1f)
@@ -348,10 +654,27 @@ fun LoginScreen(
                                 FilterChip(
                                     selected = loginParentRelation == "مادر دانش‌آموز",
                                     onClick = { loginParentRelation = "مادر دانش‌آموز" },
-                                    label = { Text("مادر دانش‌آموز") },
+                                    label = {
+                                        Text(
+                                            text = "مادر دانش‌آموز",
+                                            modifier = Modifier.fillMaxWidth(),
+                                            textAlign = TextAlign.Center,
+                                            style = MaterialTheme.typography.bodySmall.copy(
+                                                fontFamily = VazirmatnFontFamily,
+                                                fontWeight = if (loginParentRelation == "مادر دانش‌آموز") FontWeight.Bold else FontWeight.Normal
+                                            )
+                                        )
+                                    },
+                                    shape = RoundedCornerShape(12.dp),
                                     colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = SchoolBluePrimary.copy(alpha = 0.15f),
-                                        selectedLabelColor = SchoolBluePrimary
+                                        selectedContainerColor = SchoolBluePrimary.copy(alpha = if (isDark) 0.3f else 0.12f),
+                                        selectedLabelColor = if (isDark) Color.White else SchoolBluePrimary,
+                                        containerColor = inputBackground,
+                                        labelColor = labelTextColor
+                                    ),
+                                    border = BorderStroke(
+                                        1.dp,
+                                        if (loginParentRelation == "مادر دانش‌آموز") SchoolBluePrimary else cardBorder
                                     ),
                                     modifier = Modifier
                                         .weight(1f)
@@ -362,40 +685,57 @@ fun LoginScreen(
                             Spacer(modifier = Modifier.height(10.dp))
                             Surface(
                                 modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(12.dp),
-                                color = Color(0xFFF1F5F9)
+                                shape = RoundedCornerShape(14.dp),
+                                color = if (isDark) Color(0xFF0C4A6E).copy(alpha = 0.35f) else Color(0xFFF0F9FF),
+                                border = BorderStroke(1.dp, if (isDark) Color(0xFF0284C7).copy(alpha = 0.4f) else Color(0xFFBAE6FD))
                             ) {
-                                Text(
-                                    text = "اولیای گرامی: جهت ورود، نیازی به ثبت‌نام جداگانه ندارید. کافیست نام و کد دانش‌آموزی فرزند خود و رمز عبور او را وارد فرمایید.",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Color(0xFF475569),
-                                    modifier = Modifier.padding(12.dp)
-                                )
+                                Row(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalAlignment = Alignment.Top,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Info,
+                                        contentDescription = null,
+                                        tint = if (isDark) Color(0xFF38BDF8) else Color(0xFF0284C7),
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Text(
+                                        text = "اولیای گرامی: جهت ورود، نیازی به ثبت‌نام جداگانه ندارید. کافیست نام و کد دانش‌آموزی فرزند خود و رمز عبور او را وارد فرمایید.",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontFamily = VazirmatnFontFamily,
+                                            color = if (isDark) Color(0xFFBAE6FD) else Color(0xFF0369A1),
+                                            lineHeight = 18.sp
+                                        )
+                                    )
+                                }
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(14.dp))
+                        val isStaff = (loginRole == UserRole.MANAGER || loginRole == UserRole.VICE_PRINCIPAL || loginRole == UserRole.TEACHER || loginRole == UserRole.COUNSELOR)
 
-                        // Full Name
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Full Name Input
                         OutlinedTextField(
                             value = loginName,
                             onValueChange = { loginName = it },
-                            textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = VazirmatnFontFamily),
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = VazirmatnFontFamily),
                             label = {
                                 Text(
-                                    text = if (loginRole == UserRole.PARENT) "نام و نام خانوادگی فرزند دانش‌آموز" else "نام و نام خانوادگی",
-                                    style = MaterialTheme.typography.bodyMedium.copy(
-                                        fontFamily = VazirmatnFontFamily,
-                                        fontWeight = FontWeight.Light
-                                    )
+                                    text = if (loginRole == UserRole.PARENT) "نام و نام خانوادگی فرزند دانش‌آموز"
+                                           else "نام و نام خانوادگی",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = VazirmatnFontFamily)
                                 )
                             },
                             placeholder = {
                                 Text(
-                                    text = if (loginRole == UserRole.PARENT) "مثال: علی رضایی (نام فرزند)" else "نام و نام خانوادگی خود را وارد کنید",
-                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                    text = if (loginRole == UserRole.PARENT) "مثال: علی رضایی"
+                                           else if (isStaff) "مثال: مهدی فاریابی یا حسین راسخیان"
+                                           else "نام کامل خود را وارد کنید",
+                                    style = MaterialTheme.typography.bodySmall.copy(
                                         fontFamily = VazirmatnFontFamily,
-                                        fontWeight = FontWeight.Light
+                                        color = subtitleTextColor
                                     )
                                 )
                             },
@@ -407,87 +747,103 @@ fun LoginScreen(
                                 )
                             },
                             singleLine = true,
-                            shape = RoundedCornerShape(14.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = inputBackground,
+                                unfocusedContainerColor = inputBackground,
+                                focusedBorderColor = SchoolBluePrimary,
+                                unfocusedBorderColor = inputBorder,
+                                focusedTextColor = titleTextColor,
+                                unfocusedTextColor = titleTextColor,
+                                focusedLabelColor = SchoolBluePrimary,
+                                unfocusedLabelColor = subtitleTextColor
+                            ),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("login_name_input")
                         )
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                        // Student Code Input (ONLY for Student and Parent)
+                        if (!isStaff) {
+                            Spacer(modifier = Modifier.height(14.dp))
 
-                        // Student Code (6 digits)
-                        OutlinedTextField(
-                            value = loginStudentCode,
-                            onValueChange = {
-                                if (it.length <= 6 && it.all { char -> char.isDigit() }) {
-                                    loginStudentCode = it
-                                }
-                            },
-                            textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = VazirmatnFontFamily),
-                            label = {
-                                Text(
-                                    text = if (loginRole == UserRole.PARENT) "کد ۶ رقمی فرزند دانش‌آموز" else "کد دانش‌آموزی (۶ رقمی)",
-                                    style = MaterialTheme.typography.bodyMedium.copy(
-                                        fontFamily = VazirmatnFontFamily,
-                                        fontWeight = FontWeight.Light
+                            OutlinedTextField(
+                                value = loginStudentCode,
+                                onValueChange = {
+                                    if (it.length <= 6 && it.all { char -> char.isDigit() }) {
+                                        loginStudentCode = it
+                                    }
+                                },
+                                textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = VazirmatnFontFamily),
+                                label = {
+                                    Text(
+                                        text = if (loginRole == UserRole.PARENT) "کد ۶ رقمی فرزند دانش‌آموز" else "کد دانش‌آموزی (۶ رقمی)",
+                                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = VazirmatnFontFamily)
                                     )
-                                )
-                            },
-                            placeholder = {
-                                Text(
-                                    text = "کد ۶ رقمی را وارد کنید",
-                                    style = MaterialTheme.typography.bodyMedium.copy(
-                                        fontFamily = VazirmatnFontFamily,
-                                        fontWeight = FontWeight.Light
+                                },
+                                placeholder = {
+                                    Text(
+                                        text = "کد ۶ رقمی را وارد کنید",
+                                        style = MaterialTheme.typography.bodySmall.copy(
+                                            fontFamily = VazirmatnFontFamily,
+                                            color = subtitleTextColor
+                                        )
                                     )
-                                )
-                            },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Default.Badge,
-                                    contentDescription = null,
-                                    tint = SchoolBluePrimary
-                                )
-                            },
-                            supportingText = {
-                                Text(
-                                    text = if (loginRole == UserRole.PARENT) "کد ۶ رقمی ثبت‌شده برای فرزند" else "کد ۶ رقمی اختصاصی دریافت شده هنگام ثبت‌نام",
-                                    style = MaterialTheme.typography.bodySmall.copy(
-                                        fontFamily = VazirmatnFontFamily,
-                                        fontWeight = FontWeight.Light
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Badge,
+                                        contentDescription = null,
+                                        tint = SchoolBluePrimary
                                     )
-                                )
-                            },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            singleLine = true,
-                            shape = RoundedCornerShape(14.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("login_student_code_input")
-                        )
+                                },
+                                supportingText = {
+                                    Text(
+                                        text = if (loginRole == UserRole.PARENT) "کد ۶ رقمی ثبت‌شده برای فرزند" else "کد ۶ رقمی اختصاصی دریافت شده هنگام ثبت‌نام",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontFamily = VazirmatnFontFamily,
+                                            color = subtitleTextColor
+                                        )
+                                    )
+                                },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true,
+                                shape = RoundedCornerShape(16.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedContainerColor = inputBackground,
+                                    unfocusedContainerColor = inputBackground,
+                                    focusedBorderColor = SchoolBluePrimary,
+                                    unfocusedBorderColor = inputBorder,
+                                    focusedTextColor = titleTextColor,
+                                    unfocusedTextColor = titleTextColor,
+                                    focusedLabelColor = SchoolBluePrimary,
+                                    unfocusedLabelColor = subtitleTextColor
+                                ),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("login_student_code_input")
+                            )
+                        }
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
 
-                        // Password
+                        // Password Input
                         OutlinedTextField(
                             value = loginPassword,
                             onValueChange = { loginPassword = it },
-                            textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = VazirmatnFontFamily),
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = VazirmatnFontFamily),
                             label = {
                                 Text(
                                     text = if (loginRole == UserRole.PARENT) "رمز عبور حساب فرزند" else "رمز عبور",
-                                    style = MaterialTheme.typography.bodyMedium.copy(
-                                        fontFamily = VazirmatnFontFamily,
-                                        fontWeight = FontWeight.Light
-                                    )
+                                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = VazirmatnFontFamily)
                                 )
                             },
                             placeholder = {
                                 Text(
                                     text = "رمز عبور خود را وارد کنید",
-                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                    style = MaterialTheme.typography.bodySmall.copy(
                                         fontFamily = VazirmatnFontFamily,
-                                        fontWeight = FontWeight.Light
+                                        color = subtitleTextColor
                                     )
                                 )
                             },
@@ -502,49 +858,31 @@ fun LoginScreen(
                                 IconButton(onClick = { loginPasswordVisible = !loginPasswordVisible }) {
                                     Icon(
                                         imageVector = if (loginPasswordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                        contentDescription = if (loginPasswordVisible) "مخفی کردن" else "نمایش"
+                                        contentDescription = if (loginPasswordVisible) "مخفی کردن" else "نمایش",
+                                        tint = subtitleTextColor
                                     )
                                 }
                             },
                             visualTransformation = if (loginPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                             singleLine = true,
-                            shape = RoundedCornerShape(14.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = inputBackground,
+                                unfocusedContainerColor = inputBackground,
+                                focusedBorderColor = SchoolBluePrimary,
+                                unfocusedBorderColor = inputBorder,
+                                focusedTextColor = titleTextColor,
+                                unfocusedTextColor = titleTextColor,
+                                focusedLabelColor = SchoolBluePrimary,
+                                unfocusedLabelColor = subtitleTextColor
+                            ),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("login_password_input")
                         )
 
-                        // Forgot Password / Recovery button
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End
-                        ) {
-                            TextButton(
-                                onClick = {
-                                    recoveryQuery = ""
-                                    recoveryResultUser = null
-                                    recoveryError = null
-                                    showRecoveryDialog = true
-                                },
-                                modifier = Modifier.testTag("forgot_password_button")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.HelpOutline,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp),
-                                    tint = SchoolBluePrimary
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = "رمز عبور یا کد دانش‌آموزی را فراموش کرده‌اید؟",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = SchoolBluePrimary
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(10.dp))
+                        Spacer(modifier = Modifier.height(20.dp))
 
                         // Submit Login Button
                         Button(
@@ -558,11 +896,12 @@ fun LoginScreen(
                                 )
                             },
                             enabled = uiState !is AuthUiState.Loading,
-                            shape = RoundedCornerShape(14.dp),
+                            shape = RoundedCornerShape(16.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = SchoolBluePrimary),
+                            elevation = ButtonDefaults.buttonElevation(defaultElevation = 3.dp),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(52.dp)
+                                .height(54.dp)
                                 .testTag("login_submit_button")
                         ) {
                             if (uiState is AuthUiState.Loading) {
@@ -572,60 +911,105 @@ fun LoginScreen(
                                     strokeWidth = 2.dp
                                 )
                             } else {
-                                Text(
-                                    text = if (loginRole == UserRole.PARENT) "ورود به عنوان $loginParentRelation" else "ورود دانش‌آموز به سامانه",
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.Login,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Text(
+                                        text = if (isStaff) "ورود به عنوان کادر آموزشی"
+                                               else if (loginRole == UserRole.PARENT) "ورود به عنوان $loginParentRelation"
+                                               else "ورود به سامانه نظمیار",
+                                        style = MaterialTheme.typography.bodyLarge.copy(
+                                            fontFamily = VazirmatnFontFamily,
+                                            fontSize = 16.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    )
+                                }
                             }
                         }
                     }
 
-                    // TAB 1: REGISTRATION FORM (ONLY STUDENTS)
+                    // ==========================================
+                    // TAB 1: REGISTRATION FORM (STUDENTS)
+                    // ==========================================
                     else {
-                        Text(
-                            text = "فرم ثبت‌نام دانش‌آموز جدید",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(4.dp, 16.dp)
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .background(SchoolBluePrimary)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "فرم ثبت‌نام دانش‌آموز جدید",
+                                style = MaterialTheme.typography.titleSmall.copy(
+                                    fontFamily = VazirmatnFontFamily,
+                                    fontWeight = FontWeight.Bold,
+                                    color = titleTextColor
+                                )
+                            )
+                        }
 
                         Spacer(modifier = Modifier.height(4.dp))
 
                         Text(
-                            text = "ثبت‌نام مستقیم دانش‌آموزان (اولیا محترم جهت ورود، از بخش «ورود به سامانه» اقدام نمایند)",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            text = "ثبت‌نام مستقیم دانش‌آموزان (اولیا گرامی جهت ورود از تب «ورود به سامانه» اقدام فرمایند)",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontFamily = VazirmatnFontFamily,
+                                color = subtitleTextColor
+                            )
                         )
 
-                        Spacer(modifier = Modifier.height(14.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
 
                         // Grade & Class Selection
                         Text(
-                            text = "پایه و کلاس دانش‌آموز:",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold
+                            text = "انتخاب پایه و کلاس دانش‌آموز:",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontFamily = VazirmatnFontFamily,
+                                fontWeight = FontWeight.Bold,
+                                color = labelTextColor
+                            )
                         )
-                        Spacer(modifier = Modifier.height(6.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 listOf("هفتم یک", "هفتم دو", "هشتم یک").forEach { opt ->
+                                    val isSelected = regGradeClass == opt
                                     FilterChip(
-                                        selected = regGradeClass == opt,
+                                        selected = isSelected,
                                         onClick = { regGradeClass = opt },
                                         label = {
                                             Text(
                                                 text = opt,
                                                 modifier = Modifier.fillMaxWidth(),
-                                                textAlign = TextAlign.Center
+                                                textAlign = TextAlign.Center,
+                                                style = MaterialTheme.typography.bodySmall.copy(
+                                                    fontFamily = VazirmatnFontFamily,
+                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                                )
                                             )
                                         },
+                                        shape = RoundedCornerShape(12.dp),
                                         colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = SchoolBluePrimary.copy(alpha = 0.15f),
-                                            selectedLabelColor = SchoolBluePrimary
+                                            selectedContainerColor = SchoolBluePrimary.copy(alpha = if (isDark) 0.3f else 0.12f),
+                                            selectedLabelColor = if (isDark) Color.White else SchoolBluePrimary,
+                                            containerColor = inputBackground,
+                                            labelColor = labelTextColor
+                                        ),
+                                        border = BorderStroke(
+                                            1.dp,
+                                            if (isSelected) SchoolBluePrimary else cardBorder
                                         ),
                                         modifier = Modifier
                                             .weight(1f)
@@ -638,19 +1022,31 @@ fun LoginScreen(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 listOf("هشتم دو", "نهم یک", "نهم دو").forEach { opt ->
+                                    val isSelected = regGradeClass == opt
                                     FilterChip(
-                                        selected = regGradeClass == opt,
+                                        selected = isSelected,
                                         onClick = { regGradeClass = opt },
                                         label = {
                                             Text(
                                                 text = opt,
                                                 modifier = Modifier.fillMaxWidth(),
-                                                textAlign = TextAlign.Center
+                                                textAlign = TextAlign.Center,
+                                                style = MaterialTheme.typography.bodySmall.copy(
+                                                    fontFamily = VazirmatnFontFamily,
+                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                                )
                                             )
                                         },
+                                        shape = RoundedCornerShape(12.dp),
                                         colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = SchoolBluePrimary.copy(alpha = 0.15f),
-                                            selectedLabelColor = SchoolBluePrimary
+                                            selectedContainerColor = SchoolBluePrimary.copy(alpha = if (isDark) 0.3f else 0.12f),
+                                            selectedLabelColor = if (isDark) Color.White else SchoolBluePrimary,
+                                            containerColor = inputBackground,
+                                            labelColor = labelTextColor
+                                        ),
+                                        border = BorderStroke(
+                                            1.dp,
+                                            if (isSelected) SchoolBluePrimary else cardBorder
                                         ),
                                         modifier = Modifier
                                             .weight(1f)
@@ -660,9 +1056,9 @@ fun LoginScreen(
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
 
-                        // Full Name
+                        // Full Name with Registry Matching Indicator
                         val matchedStudent = remember(regName) {
                             if (regName.trim().length >= 2) {
                                 com.example.data.demo.AllowedStudentsRegistry.findMatchingAllowedStudent(regName)
@@ -686,22 +1082,19 @@ fun LoginScreen(
                                     }
                                 }
                             },
-                            textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = VazirmatnFontFamily),
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = VazirmatnFontFamily),
                             label = {
                                 Text(
                                     text = "نام و نام خانوادگی دانش‌آموز (طبق لیست مدرسه)",
-                                    style = MaterialTheme.typography.bodyMedium.copy(
-                                        fontFamily = VazirmatnFontFamily,
-                                        fontWeight = FontWeight.Light
-                                    )
+                                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = VazirmatnFontFamily)
                                 )
                             },
                             placeholder = {
                                 Text(
                                     text = "مثال: علی عالیپور یا محمد طاها ارشادی",
-                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                    style = MaterialTheme.typography.bodySmall.copy(
                                         fontFamily = VazirmatnFontFamily,
-                                        fontWeight = FontWeight.Light
+                                        color = subtitleTextColor
                                     )
                                 )
                             },
@@ -713,7 +1106,7 @@ fun LoginScreen(
                                     Icon(
                                         imageVector = Icons.Default.CheckCircle,
                                         contentDescription = "تأیید در لیست مدرسه",
-                                        tint = PositiveGreen
+                                        tint = if (isDark) Color(0xFF34D399) else PositiveGreen
                                     )
                                 }
                             },
@@ -721,54 +1114,65 @@ fun LoginScreen(
                                 if (matchedStudent != null) {
                                     Text(
                                         text = "✓ دانش‌آموز مجاز: ${matchedStudent.fullName} (${matchedStudent.grade} - ${matchedStudent.className})",
-                                        color = PositiveGreen,
-                                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold)
+                                        color = if (isDark) Color(0xFF34D399) else PositiveGreen,
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontFamily = VazirmatnFontFamily,
+                                            fontWeight = FontWeight.Bold
+                                        )
                                     )
                                 } else if (regName.trim().length >= 3) {
                                     Text(
                                         text = "فقط دانش‌آموزان موجود در لیست رسمی مدرسه مجاز به ثبت‌نام هستند.",
-                                        color = MaterialTheme.colorScheme.error,
-                                        style = MaterialTheme.typography.bodySmall
+                                        color = if (isDark) Color(0xFFF87171) else MaterialTheme.colorScheme.error,
+                                        style = MaterialTheme.typography.labelSmall.copy(fontFamily = VazirmatnFontFamily)
                                     )
                                 } else {
                                     Text(
-                                        text = "نام و نام خانوادگی را دقیق وارد کنید (فاصله‌ها به صورت خودکار تصحیح می‌شوند)",
-                                        style = MaterialTheme.typography.bodySmall
+                                        text = "نام و نام خانوادگی را دقیق وارد کنید (فاصله‌ها خودکار تطبیق داده می‌شوند)",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontFamily = VazirmatnFontFamily, color = subtitleTextColor)
                                     )
                                 }
                             },
                             isError = regName.trim().length >= 3 && matchedStudent == null,
                             singleLine = true,
-                            shape = RoundedCornerShape(14.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = inputBackground,
+                                unfocusedContainerColor = inputBackground,
+                                focusedBorderColor = SchoolBluePrimary,
+                                unfocusedBorderColor = inputBorder,
+                                focusedTextColor = titleTextColor,
+                                unfocusedTextColor = titleTextColor,
+                                focusedLabelColor = SchoolBluePrimary,
+                                unfocusedLabelColor = subtitleTextColor
+                            ),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("reg_name_input")
                         )
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
 
-                        // Student Code (Auto-generated 6-digit number, generated/changed only via circular arrow)
+                        // Student Code (Auto-generated 6-digit number with sleek token styling)
                         OutlinedTextField(
                             value = if (regStudentCode.isNotEmpty()) regStudentCode.toPersianDigits() else "",
-                            onValueChange = {}, // Read-only: cannot be typed manually
+                            onValueChange = {},
                             readOnly = true,
-                            textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = VazirmatnFontFamily),
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                fontFamily = VazirmatnFontFamily,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isDark) Color(0xFF34D399) else PositiveGreen
+                            ),
                             label = {
                                 Text(
-                                    text = "کد دانش‌آموزی ۶ رقمی (سیستمی)",
-                                    style = MaterialTheme.typography.bodyMedium.copy(
-                                        fontFamily = VazirmatnFontFamily,
-                                        fontWeight = FontWeight.Light
-                                    )
+                                    text = "کد دانش‌آموزی ۶ رقمی (سیستمی و اختصاصی)",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = VazirmatnFontFamily)
                                 )
                             },
                             placeholder = {
                                 Text(
                                     text = "برای تولید کد دکمه بازتولید را لمس کنید",
-                                    style = MaterialTheme.typography.bodyMedium.copy(
-                                        fontFamily = VazirmatnFontFamily,
-                                        fontWeight = FontWeight.Light
-                                    )
+                                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = VazirmatnFontFamily)
                                 )
                             },
                             leadingIcon = {
@@ -789,43 +1193,48 @@ fun LoginScreen(
                             supportingText = {
                                 Text(
                                     text = if (regStudentCode.isNotEmpty())
-                                        "کد اختصاصی: $regStudentCode (برای تغییر، دکمه بازتولید را لمس کنید)"
+                                        "کد اختصاصی شما: ${regStudentCode.toPersianDigits()} (برای کد جدید، آیکون رفرش را بزنید)"
                                     else
                                         "برای تولید کد ۶ رقمی، دکمه بازتولید را لمس کنید",
-                                    style = MaterialTheme.typography.bodySmall.copy(
+                                    style = MaterialTheme.typography.labelSmall.copy(
                                         fontFamily = VazirmatnFontFamily,
-                                        fontWeight = FontWeight.Light
+                                        color = subtitleTextColor
                                     )
                                 )
                             },
-                            shape = RoundedCornerShape(14.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = if (isDark) Color(0xFF064E3B).copy(alpha = 0.3f) else Color(0xFFF0FDF4),
+                                unfocusedContainerColor = if (isDark) Color(0xFF064E3B).copy(alpha = 0.2f) else Color(0xFFF0FDF4),
+                                focusedBorderColor = PositiveGreen,
+                                unfocusedBorderColor = if (isDark) PositiveGreen.copy(alpha = 0.5f) else Color(0xFFBBF7D0),
+                                focusedTextColor = if (isDark) Color(0xFF34D399) else PositiveGreen,
+                                unfocusedTextColor = if (isDark) Color(0xFF34D399) else PositiveGreen
+                            ),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("reg_student_code_input")
                         )
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
 
                         // Phone Number
                         OutlinedTextField(
                             value = regPhone,
                             onValueChange = { regPhone = it },
-                            textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = VazirmatnFontFamily),
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = VazirmatnFontFamily),
                             label = {
                                 Text(
-                                    text = "شماره تماس",
-                                    style = MaterialTheme.typography.bodyMedium.copy(
-                                        fontFamily = VazirmatnFontFamily,
-                                        fontWeight = FontWeight.Light
-                                    )
+                                    text = "شماره تماس همراه",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = VazirmatnFontFamily)
                                 )
                             },
                             placeholder = {
                                 Text(
                                     text = "مثال: 09123456789",
-                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                    style = MaterialTheme.typography.bodySmall.copy(
                                         fontFamily = VazirmatnFontFamily,
-                                        fontWeight = FontWeight.Light
+                                        color = subtitleTextColor
                                     )
                                 )
                             },
@@ -834,34 +1243,41 @@ fun LoginScreen(
                             },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                             singleLine = true,
-                            shape = RoundedCornerShape(14.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = inputBackground,
+                                unfocusedContainerColor = inputBackground,
+                                focusedBorderColor = SchoolBluePrimary,
+                                unfocusedBorderColor = inputBorder,
+                                focusedTextColor = titleTextColor,
+                                unfocusedTextColor = titleTextColor,
+                                focusedLabelColor = SchoolBluePrimary,
+                                unfocusedLabelColor = subtitleTextColor
+                            ),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("reg_phone_input")
                         )
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
 
                         // Email (Optional, for recovery)
                         OutlinedTextField(
                             value = regEmail,
                             onValueChange = { regEmail = it },
-                            textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = VazirmatnFontFamily),
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = VazirmatnFontFamily),
                             label = {
                                 Text(
-                                    text = "ایمیل (اختیاری)",
-                                    style = MaterialTheme.typography.bodyMedium.copy(
-                                        fontFamily = VazirmatnFontFamily,
-                                        fontWeight = FontWeight.Light
-                                    )
+                                    text = "ایمیل (اختیاری جهت بازیابی)",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = VazirmatnFontFamily)
                                 )
                             },
                             placeholder = {
                                 Text(
-                                    text = "جهت بازیابی رمز عبور و کد دانش‌آموزی",
-                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                    text = "name@example.com",
+                                    style = MaterialTheme.typography.bodySmall.copy(
                                         fontFamily = VazirmatnFontFamily,
-                                        fontWeight = FontWeight.Light
+                                        color = subtitleTextColor
                                     )
                                 )
                             },
@@ -870,43 +1286,50 @@ fun LoginScreen(
                             },
                             supportingText = {
                                 Text(
-                                    text = "اختیاری - فقط جهت بازیابی رمز عبور و کد دانش‌آموزی",
-                                    style = MaterialTheme.typography.bodySmall.copy(
+                                    text = "اختیاری - فقط جهت بازیابی آسان‌تر رمز عبور و کد دانش‌آموزی",
+                                    style = MaterialTheme.typography.labelSmall.copy(
                                         fontFamily = VazirmatnFontFamily,
-                                        fontWeight = FontWeight.Light
+                                        color = subtitleTextColor
                                     )
                                 )
                             },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                             singleLine = true,
-                            shape = RoundedCornerShape(14.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = inputBackground,
+                                unfocusedContainerColor = inputBackground,
+                                focusedBorderColor = SchoolBluePrimary,
+                                unfocusedBorderColor = inputBorder,
+                                focusedTextColor = titleTextColor,
+                                unfocusedTextColor = titleTextColor,
+                                focusedLabelColor = SchoolBluePrimary,
+                                unfocusedLabelColor = subtitleTextColor
+                            ),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("reg_email_input")
                         )
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
 
                         // Password
                         OutlinedTextField(
                             value = regPassword,
                             onValueChange = { regPassword = it },
-                            textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = VazirmatnFontFamily),
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = VazirmatnFontFamily),
                             label = {
                                 Text(
-                                    text = "رمز عبور",
-                                    style = MaterialTheme.typography.bodyMedium.copy(
-                                        fontFamily = VazirmatnFontFamily,
-                                        fontWeight = FontWeight.Light
-                                    )
+                                    text = "رمز عبور جدید",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = VazirmatnFontFamily)
                                 )
                             },
                             placeholder = {
                                 Text(
-                                    text = "رمز عبور را وارد کنید",
-                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                    text = "رمز عبور دلخواه خود را وارد کنید",
+                                    style = MaterialTheme.typography.bodySmall.copy(
                                         fontFamily = VazirmatnFontFamily,
-                                        fontWeight = FontWeight.Light
+                                        color = subtitleTextColor
                                     )
                                 )
                             },
@@ -917,41 +1340,49 @@ fun LoginScreen(
                                 IconButton(onClick = { regPasswordVisible = !regPasswordVisible }) {
                                     Icon(
                                         imageVector = if (regPasswordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                        contentDescription = null
+                                        contentDescription = null,
+                                        tint = subtitleTextColor
                                     )
                                 }
                             },
                             visualTransformation = if (regPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                             singleLine = true,
-                            shape = RoundedCornerShape(14.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = inputBackground,
+                                unfocusedContainerColor = inputBackground,
+                                focusedBorderColor = SchoolBluePrimary,
+                                unfocusedBorderColor = inputBorder,
+                                focusedTextColor = titleTextColor,
+                                unfocusedTextColor = titleTextColor,
+                                focusedLabelColor = SchoolBluePrimary,
+                                unfocusedLabelColor = subtitleTextColor
+                            ),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("reg_password_input")
                         )
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
 
                         // Confirm Password
                         OutlinedTextField(
                             value = regConfirmPassword,
                             onValueChange = { regConfirmPassword = it },
-                            textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = VazirmatnFontFamily),
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = VazirmatnFontFamily),
                             label = {
                                 Text(
                                     text = "تکرار رمز عبور",
-                                    style = MaterialTheme.typography.bodyMedium.copy(
-                                        fontFamily = VazirmatnFontFamily,
-                                        fontWeight = FontWeight.Light
-                                    )
+                                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = VazirmatnFontFamily)
                                 )
                             },
                             placeholder = {
                                 Text(
                                     text = "مجدداً رمز عبور را وارد کنید",
-                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                    style = MaterialTheme.typography.bodySmall.copy(
                                         fontFamily = VazirmatnFontFamily,
-                                        fontWeight = FontWeight.Light
+                                        color = subtitleTextColor
                                     )
                                 )
                             },
@@ -963,20 +1394,30 @@ fun LoginScreen(
                                     Icon(
                                         imageVector = Icons.Default.CheckCircle,
                                         contentDescription = "مطابقت دارد",
-                                        tint = PositiveGreen
+                                        tint = if (isDark) Color(0xFF34D399) else PositiveGreen
                                     )
                                 }
                             },
                             visualTransformation = if (regPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                             singleLine = true,
-                            shape = RoundedCornerShape(14.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = inputBackground,
+                                unfocusedContainerColor = inputBackground,
+                                focusedBorderColor = SchoolBluePrimary,
+                                unfocusedBorderColor = inputBorder,
+                                focusedTextColor = titleTextColor,
+                                unfocusedTextColor = titleTextColor,
+                                focusedLabelColor = SchoolBluePrimary,
+                                unfocusedLabelColor = subtitleTextColor
+                            ),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("reg_confirm_password_input")
                         )
 
-                        Spacer(modifier = Modifier.height(18.dp))
+                        Spacer(modifier = Modifier.height(20.dp))
 
                         // Submit Registration Button
                         Button(
@@ -1011,11 +1452,12 @@ fun LoginScreen(
                                 )
                             },
                             enabled = uiState !is AuthUiState.Loading,
-                            shape = RoundedCornerShape(14.dp),
+                            shape = RoundedCornerShape(16.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = SchoolBluePrimary),
+                            elevation = ButtonDefaults.buttonElevation(defaultElevation = 3.dp),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(52.dp)
+                                .height(54.dp)
                                 .testTag("register_submit_button")
                         ) {
                             if (uiState is AuthUiState.Loading) {
@@ -1025,11 +1467,24 @@ fun LoginScreen(
                                     strokeWidth = 2.dp
                                 )
                             } else {
-                                Text(
-                                    text = "ثبت‌نام و ورود دانش‌آموز به سامانه",
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.PersonAdd,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Text(
+                                        text = "ثبت‌نام و ورود دانش‌آموز به سامانه",
+                                        style = MaterialTheme.typography.bodyLarge.copy(
+                                            fontFamily = VazirmatnFontFamily,
+                                            fontSize = 16.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    )
+                                }
                             }
                         }
                     }
@@ -1043,31 +1498,46 @@ fun LoginScreen(
         if (showRecoveryDialog) {
             AlertDialog(
                 onDismissRequest = { showRecoveryDialog = false },
+                shape = RoundedCornerShape(24.dp),
+                containerColor = cardBackground,
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.Key,
-                            contentDescription = null,
-                            tint = SchoolBluePrimary,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Surface(
+                            shape = CircleShape,
+                            color = SchoolBluePrimary.copy(alpha = if (isDark) 0.25f else 0.1f),
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.Key,
+                                    contentDescription = null,
+                                    tint = SchoolBluePrimary,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = "بازیابی از طریق پیامک یا ایمیل",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
+                            text = "بازیابی رمز عبور و کد دانش‌آموزی",
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontFamily = VazirmatnFontFamily,
+                                fontWeight = FontWeight.Bold,
+                                color = titleTextColor
+                            )
                         )
                     }
                 },
                 text = {
                     Column(modifier = Modifier.fillMaxWidth()) {
                         Text(
-                            text = "دریافت کد دانش‌آموزی و رمز عبور فقط از طریق شماره تماس (ارسال پیامک) یا ارسال به صندوق ایمیل ثبت‌شده امکان‌پذیر است:",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            text = "دریافت کد دانش‌آموزی و رمز عبور از طریق شماره تماس (پیامک) یا صندوق ایمیل ثبت‌شده امکان‌پذیر است:",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontFamily = VazirmatnFontFamily,
+                                color = labelTextColor
+                            )
                         )
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
 
                         OutlinedTextField(
                             value = recoveryQuery,
@@ -1075,10 +1545,19 @@ fun LoginScreen(
                                 recoveryQuery = it
                                 recoveryError = null
                             },
-                            label = { Text("شماره تماس (پیامک) یا ایمیل") },
-                            placeholder = { Text("مثال: 09123456789 یا email@domain.com") },
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = VazirmatnFontFamily),
+                            label = { Text("شماره همراه یا ایمیل", style = MaterialTheme.typography.bodySmall.copy(fontFamily = VazirmatnFontFamily)) },
+                            placeholder = { Text("مثال: 09123456789 یا email@domain.com", style = MaterialTheme.typography.bodySmall.copy(fontFamily = VazirmatnFontFamily, color = subtitleTextColor)) },
                             singleLine = true,
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = inputBackground,
+                                unfocusedContainerColor = inputBackground,
+                                focusedBorderColor = SchoolBluePrimary,
+                                unfocusedBorderColor = inputBorder,
+                                focusedTextColor = titleTextColor,
+                                unfocusedTextColor = titleTextColor
+                            ),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("recovery_query_input")
@@ -1086,62 +1565,91 @@ fun LoginScreen(
 
                         // Error or Result Display
                         recoveryError?.let { err ->
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = err,
-                                color = MaterialTheme.colorScheme.error,
-                                style = MaterialTheme.typography.bodySmall
-                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = IncidentRedContainer,
+                                border = BorderStroke(1.dp, Color(0xFFFECACA)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = err,
+                                    color = OnIncidentRedContainer,
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        fontFamily = VazirmatnFontFamily,
+                                        fontWeight = FontWeight.Medium
+                                    ),
+                                    modifier = Modifier.padding(10.dp)
+                                )
+                            }
                         }
 
                         recoveryResultUser?.let { user ->
                             Spacer(modifier = Modifier.height(14.dp))
                             Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = Color(0xFFF0FDF4), // Success green light
+                                shape = RoundedCornerShape(14.dp),
+                                color = if (isDark) Color(0xFF064E3B).copy(alpha = 0.35f) else Color(0xFFF0FDF4),
+                                border = BorderStroke(1.dp, if (isDark) Color(0xFF059669).copy(alpha = 0.4f) else Color(0xFFBBF7D0)),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                Column(modifier = Modifier.padding(12.dp)) {
+                                Column(modifier = Modifier.padding(14.dp)) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Icon(
                                             imageVector = Icons.Default.CheckCircle,
                                             contentDescription = null,
-                                            tint = PositiveGreen,
+                                            tint = if (isDark) Color(0xFF34D399) else PositiveGreen,
                                             modifier = Modifier.size(20.dp)
                                         )
                                         Spacer(modifier = Modifier.width(6.dp))
                                         Text(
-                                            text = "اطلاعات با موفقیت آماده ارسال شد:",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            fontWeight = FontWeight.Bold,
-                                            color = Color(0xFF166534)
+                                            text = "اطلاعات با موفقیت بازیابی شد:",
+                                            style = MaterialTheme.typography.bodySmall.copy(
+                                                fontFamily = VazirmatnFontFamily,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (isDark) Color(0xFF34D399) else Color(0xFF166534)
+                                            )
                                         )
                                     }
 
                                     Spacer(modifier = Modifier.height(8.dp))
                                     Text(
-                                        text = "📱 دریافت از طریق پیامک: شماره ${user.phone.toPersianDigits()}",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        fontWeight = FontWeight.Medium
+                                        text = "📱 شماره پیامک: ${user.phone.toPersianDigits()}",
+                                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = VazirmatnFontFamily, color = titleTextColor)
                                     )
                                     Text(
-                                        text = "✉️ دریافت از طریق ایمیل: ${if (user.email.isNotBlank()) user.email else "ایمیل ثبت نشده است"}",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        fontWeight = FontWeight.Medium
+                                        text = "✉️ آدرس ایمیل: ${if (user.email.isNotBlank()) user.email else "ایمیل ثبت نشده است"}",
+                                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = VazirmatnFontFamily, color = titleTextColor)
                                     )
                                     Spacer(modifier = Modifier.height(6.dp))
-                                    Text(
-                                        text = "کد دانش‌آموزی: ${user.studentCode.toPersianDigits()} | رمز عبور: ${user.password}",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = SchoolBluePrimary
-                                    )
-                                    Spacer(modifier = Modifier.height(6.dp))
-                                    Text(
-                                        text = "✅ مشخصات کاربری با موفقیت بررسی شد و به سرشماره پیامک و صندوق ایمیل ارسال گردید.",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = Color(0xFF15803D)
-                                    )
+                                    Surface(
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = SchoolBluePrimary.copy(alpha = if (isDark) 0.2f else 0.08f),
+                                        border = BorderStroke(1.dp, SchoolBluePrimary.copy(alpha = if (isDark) 0.4f else 0.2f)),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = "کد: ${user.studentCode.toPersianDigits()}",
+                                                style = MaterialTheme.typography.bodySmall.copy(
+                                                    fontFamily = VazirmatnFontFamily,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = SchoolBluePrimary
+                                                )
+                                            )
+                                            Text(
+                                                text = "رمز عبور: ${user.password}",
+                                                style = MaterialTheme.typography.bodySmall.copy(
+                                                    fontFamily = VazirmatnFontFamily,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = SchoolBluePrimary
+                                                )
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -1151,7 +1659,6 @@ fun LoginScreen(
                     Button(
                         onClick = {
                             if (recoveryResultUser != null) {
-                                // Auto-fill into login form
                                 loginName = recoveryResultUser?.name.orEmpty()
                                 loginStudentCode = recoveryResultUser?.studentCode.orEmpty()
                                 loginPassword = recoveryResultUser?.password.orEmpty()
@@ -1171,15 +1678,21 @@ fun LoginScreen(
                             }
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = SchoolBluePrimary),
-                        shape = RoundedCornerShape(10.dp),
+                        shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.testTag("recovery_submit_button")
                     ) {
-                        Text(if (recoveryResultUser != null) "انتقال به فرم ورود" else "ارسال به پیامک / ایمیل")
+                        Text(
+                            text = if (recoveryResultUser != null) "انتقال به فرم ورود" else "ارسال به پیامک / ایمیل",
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontFamily = VazirmatnFontFamily,
+                                fontWeight = FontWeight.Bold
+                            )
+                        )
                     }
                 },
                 dismissButton = {
                     TextButton(onClick = { showRecoveryDialog = false }) {
-                        Text("بستن")
+                        Text("بستن", style = MaterialTheme.typography.bodyMedium.copy(fontFamily = VazirmatnFontFamily, color = subtitleTextColor))
                     }
                 }
             )

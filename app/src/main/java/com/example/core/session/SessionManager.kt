@@ -134,8 +134,8 @@ object SessionManager {
         return try {
             val obj = JSONObject(str)
             com.example.domain.model.AppUpdateInfo(
-                versionCode = obj.optInt("version_code", obj.optInt("latestVersionCode", 8)),
-                versionName = obj.optString("version_name", obj.optString("latestVersionName", "1.0.7")),
+                versionCode = obj.optInt("version_code", obj.optInt("latestVersionCode", 11)),
+                versionName = obj.optString("version_name", obj.optString("latestVersionName", "1.1.2")),
                 apkUrl = obj.optString("apk_url", obj.optString("downloadUrl", "")),
                 updateMessage = obj.optString("update_message", obj.optString("releaseNotes", "")),
                 isForced = obj.optBoolean("is_forced", obj.optBoolean("isForceUpdate", false)),

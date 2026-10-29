@@ -14,6 +14,7 @@ import com.example.domain.model.SeverityLevel
 import com.example.domain.model.Student
 import com.example.domain.model.UserRole
 import com.example.domain.model.toPersianDigits
+import com.example.domain.model.sanitizePhoneNumber
 import com.example.domain.repository.AuthRepository
 import com.example.domain.repository.BehaviorRepository
 import com.example.domain.repository.ClassRepository
@@ -28,6 +29,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.UUID
+import kotlin.random.Random
 
 sealed class OperationState {
     data object Idle : OperationState()
@@ -73,45 +75,50 @@ class MainViewModel(
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    private fun matchesGradeAndClassFilter(student: Student, targetGrade: String): Boolean {
-        if (targetGrade == "همه" || targetGrade == "همه پایه‌ها") return true
+    companion object {
+        fun matchesGradeAndClassFilter(student: Student, targetGrade: String): Boolean {
+            if (targetGrade == "همه" || targetGrade == "همه پایه‌ها" || targetGrade.isBlank()) return true
 
-        val sGrade = student.grade.lowercase()
-        val sClass = student.className.lowercase()
-        val combined = "$sGrade $sClass"
+            val sGrade = student.grade.lowercase()
+            val sClass = student.className.lowercase()
+            val combined = "$sGrade $sClass"
 
-        return when (targetGrade) {
-            "هفتم یک" -> {
-                combined.contains("هفتم یک") || combined.contains("هفتم ۱") || combined.contains("هفتم 1") ||
-                ((sGrade.contains("هفتم") || sGrade.contains("7")) &&
-                 (sClass.contains("7/1") || sClass.contains("یک") || sClass.contains("۱") || sClass.contains("/1") || (sClass.contains("1") && !sClass.contains("10") && !sClass.contains("11") && !sClass.contains("12"))))
+            return when (targetGrade) {
+                "هفتم", "پایه هفتم" -> sGrade.contains("هفتم") || sGrade.contains("7") || sGrade.contains("۷")
+                "هشتم", "پایه هشتم" -> sGrade.contains("هشتم") || sGrade.contains("8") || sGrade.contains("۸")
+                "نهم", "پایه نهم" -> sGrade.contains("نهم") || sGrade.contains("9") || sGrade.contains("۹")
+                "هفتم یک" -> {
+                    combined.contains("هفتم یک") || combined.contains("هفتم ۱") || combined.contains("هفتم 1") ||
+                    ((sGrade.contains("هفتم") || sGrade.contains("7") || sGrade.contains("۷")) &&
+                     (sClass.contains("7/1") || sClass.contains("۷/۱") || sClass.contains("یک") || sClass.contains("۱") || sClass.contains("/1") || (sClass.contains("1") && !sClass.contains("10") && !sClass.contains("11") && !sClass.contains("12"))))
+                }
+                "هفتم دو" -> {
+                    combined.contains("هفتم دو") || combined.contains("هفتم ۲") || combined.contains("هفتم 2") ||
+                    ((sGrade.contains("هفتم") || sGrade.contains("7") || sGrade.contains("۷")) &&
+                     (sClass.contains("7/2") || sClass.contains("۷/۲") || sClass.contains("دو") || sClass.contains("۲") || sClass.contains("/2") || sClass.contains("2")))
+                }
+                "هشتم یک" -> {
+                    combined.contains("هشتم یک") || combined.contains("هشتم ۱") || combined.contains("هشتم 1") ||
+                    ((sGrade.contains("هشتم") || sGrade.contains("8") || sGrade.contains("۸")) &&
+                     (sClass.contains("8/1") || sClass.contains("۸/۱") || sClass.contains("یک") || sClass.contains("۱") || sClass.contains("/1") || sClass.contains("1")))
+                }
+                "هشتم دو" -> {
+                    combined.contains("هشتم دو") || combined.contains("هشتم ۲") || combined.contains("هشتم 2") ||
+                    ((sGrade.contains("هشتم") || sGrade.contains("8") || sGrade.contains("۸")) &&
+                     (sClass.contains("8/2") || sClass.contains("۸/۲") || sClass.contains("دو") || sClass.contains("۲") || sClass.contains("/2") || sClass.contains("2")))
+                }
+                "نهم یک" -> {
+                    combined.contains("نهم یک") || combined.contains("نهم ۱") || combined.contains("نهم 1") ||
+                    ((sGrade.contains("نهم") || sGrade.contains("9") || sGrade.contains("۹")) &&
+                     (sClass.contains("9/1") || sClass.contains("۹/۱") || sClass.contains("یک") || sClass.contains("۱") || sClass.contains("/1") || sClass.contains("1")))
+                }
+                "نهم دو" -> {
+                    combined.contains("نهم دو") || combined.contains("نهم ۲") || combined.contains("نهم 2") ||
+                    ((sGrade.contains("نهم") || sGrade.contains("9") || sGrade.contains("۹")) &&
+                     (sClass.contains("9/2") || sClass.contains("۹/۲") || sClass.contains("دو") || sClass.contains("۲") || sClass.contains("/2") || sClass.contains("2")))
+                }
+                else -> sGrade == targetGrade.lowercase() || sClass == targetGrade.lowercase() || combined.contains(targetGrade.lowercase())
             }
-            "هفتم دو" -> {
-                combined.contains("هفتم دو") || combined.contains("هفتم ۲") || combined.contains("هفتم 2") ||
-                ((sGrade.contains("هفتم") || sGrade.contains("7")) &&
-                 (sClass.contains("7/2") || sClass.contains("دو") || sClass.contains("۲") || sClass.contains("/2") || sClass.contains("2")))
-            }
-            "هشتم یک" -> {
-                combined.contains("هشتم یک") || combined.contains("هشتم ۱") || combined.contains("هشتم 1") ||
-                ((sGrade.contains("هشتم") || sGrade.contains("8")) &&
-                 (sClass.contains("8/1") || sClass.contains("یک") || sClass.contains("۱") || sClass.contains("/1") || sClass.contains("1")))
-            }
-            "هشتم دو" -> {
-                combined.contains("هشتم دو") || combined.contains("هشتم ۲") || combined.contains("هشتم 2") ||
-                ((sGrade.contains("هشتم") || sGrade.contains("8")) &&
-                 (sClass.contains("8/2") || sClass.contains("دو") || sClass.contains("۲") || sClass.contains("/2") || sClass.contains("2")))
-            }
-            "نهم یک" -> {
-                combined.contains("نهم یک") || combined.contains("نهم ۱") || combined.contains("نهم 1") ||
-                ((sGrade.contains("نهم") || sGrade.contains("9")) &&
-                 (sClass.contains("9/1") || sClass.contains("یک") || sClass.contains("۱") || sClass.contains("/1") || sClass.contains("1")))
-            }
-            "نهم دو" -> {
-                combined.contains("نهم دو") || combined.contains("نهم ۲") || combined.contains("نهم 2") ||
-                ((sGrade.contains("نهم") || sGrade.contains("9")) &&
-                 (sClass.contains("9/2") || sClass.contains("دو") || sClass.contains("۲") || sClass.contains("/2") || sClass.contains("2")))
-            }
-            else -> sGrade == targetGrade.lowercase() || sClass == targetGrade.lowercase() || combined.contains(targetGrade.lowercase())
         }
     }
 
@@ -130,6 +137,9 @@ class MainViewModel(
 
     val notifications: StateFlow<List<AppNotification>> = notificationRepository.getNotifications()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val allUsers: StateFlow<List<com.example.domain.model.User>> = authRepository.allUsers
+        .stateIn(viewModelScope, SharingStarted.Eagerly, authRepository.allUsers.value)
 
     val operationState = MutableStateFlow<OperationState>(OperationState.Idle)
 
@@ -153,6 +163,18 @@ class MainViewModel(
 
     fun resetOperationState() {
         operationState.value = OperationState.Idle
+    }
+
+    fun notifyBothParentsUnlocked(studentCode: String, studentName: String, studentId: String, schoolId: String) {
+        viewModelScope.launch {
+            val notifs = com.example.core.auth.ParentAccessManager.createBothParentsUnlockedNotifications(
+                studentCode = studentCode,
+                studentName = studentName,
+                studentId = studentId,
+                schoolId = schoolId
+            )
+            notifs.forEach { notificationRepository.addNotification(it) }
+        }
     }
 
     fun submitPositiveRecord(
@@ -198,6 +220,12 @@ class MainViewModel(
             posTitle.value = ""
             posDescription.value = ""
             onSuccess()
+        }
+    }
+
+    fun deleteBehaviorRecord(recordId: String) {
+        viewModelScope.launch {
+            behaviorRepository.deleteRecord(recordId)
         }
     }
 
@@ -264,7 +292,8 @@ class MainViewModel(
         points: Int = if (type.isPositive) 2 else 1,
         createdBy: String = "معاونت مدرسه",
         createdByRole: UserRole = UserRole.VICE_PRINCIPAL,
-        parentNotified: Boolean = true
+        parentNotified: Boolean = true,
+        imageUrl: String? = null
     ) {
         val student = allStudents.value.firstOrNull { it.id == studentId } 
             ?: students.value.firstOrNull { it.id == studentId } 
@@ -288,9 +317,31 @@ class MainViewModel(
                 points = points,
                 createdBy = createdBy,
                 createdByRole = createdByRole,
-                parentNotified = parentNotified
+                parentNotified = parentNotified,
+                imageUrl = imageUrl
             )
             behaviorRepository.addRecord(record)
+
+            try {
+                val ctx = AppContainer.appContext
+                com.example.core.notification.NotificationHelper.showBehaviorNotification(
+                    context = ctx,
+                    studentName = student.fullName,
+                    behaviorTitle = title.trim(),
+                    isPositive = type.isPositive
+                )
+            } catch (_: Exception) {}
+        }
+    }
+
+    fun updateStudentFaceRegistration(
+        studentId: String,
+        frontUrl: String?,
+        leftUrl: String?,
+        rightUrl: String?
+    ) {
+        viewModelScope.launch {
+            studentRepository.updateStudentFaceRegistration(studentId, frontUrl, leftUrl, rightUrl)
         }
     }
 
@@ -309,7 +360,7 @@ class MainViewModel(
         val cleanF = firstName.trim().replace("دانش‌آموز", "").replace("دانش آموز", "").trim()
         val cleanL = lastName.trim().replace("دانش‌آموز", "").replace("دانش آموز", "").trim()
         val trimmedCode = studentCode.trim()
-        val trimmedPhone = parentPhone.trim()
+        val trimmedPhone = parentPhone.sanitizePhoneNumber()
         val trimmedPass = password.trim().ifBlank { "1234" }
 
         if (cleanF.isBlank() || trimmedCode.isBlank()) {
@@ -353,6 +404,60 @@ class MainViewModel(
             )
             studentRepository.addStudent(student)
             operationState.value = OperationState.Success("${student.fullName} با موفقیت در سامانه ثبت شد و امکان ورود دارد.")
+            onComplete()
+        }
+    }
+
+    fun addPendingStudent(
+        firstName: String,
+        lastName: String,
+        grade: String,
+        className: String,
+        onComplete: () -> Unit
+    ) {
+        val cleanF = firstName.trim().replace("دانش‌آموز", "").replace("دانش آموز", "").trim()
+        val cleanL = lastName.trim().replace("دانش‌آموز", "").replace("دانش آموز", "").trim()
+        val generatedCode = Random.nextInt(100000, 999999).toString()
+
+        if (cleanF.isBlank()) {
+            operationState.value = OperationState.Error("لطفاً نام دانش‌آموز را وارد کنید.")
+            return
+        }
+
+        val candidateFullName = "$cleanF $cleanL".trim()
+        val candidateNorm = com.example.data.demo.AllowedStudentsRegistry.normalize(candidateFullName)
+        val duplicate = allStudents.value.any { s ->
+            com.example.data.demo.AllowedStudentsRegistry.normalize(s.fullName) == candidateNorm
+        }
+        if (duplicate) {
+            operationState.value = OperationState.Error("دانش‌آموزی با نام «$candidateFullName» قبلاً در سامانه موجود است.")
+            return
+        }
+
+        viewModelScope.launch {
+            val student = Student(
+                id = "std_${UUID.randomUUID().toString().take(8)}",
+                firstName = cleanF,
+                lastName = cleanL,
+                studentCode = generatedCode,
+                grade = grade,
+                className = className,
+                gender = "پسر",
+                schoolId = DemoData.DEFAULT_SCHOOL_ID,
+                score = 100,
+                parentPhone = "09${Random.nextInt(100000000, 999999999)}",
+                email = "",
+                password = "1234",
+                role = UserRole.STUDENT,
+                rankTitle = "دانش‌آموز",
+                rankColorHex = "#64748B",
+                permissions = emptyList(),
+                isRegistered = false,
+                hasLoggedIn = false,
+                addedByStaff = true
+            )
+            studentRepository.addStudent(student)
+            operationState.value = OperationState.Success("${student.fullName} با موفقیت به عنوان دانش‌آموز (در انتظار ورود) به لیست اضافه شد.")
             onComplete()
         }
     }
@@ -423,6 +528,12 @@ class MainViewModel(
     fun markAllNotificationsAsRead() {
         viewModelScope.launch {
             notificationRepository.markAllAsRead()
+        }
+    }
+
+    fun addNotification(notification: AppNotification) {
+        viewModelScope.launch {
+            notificationRepository.addNotification(notification)
         }
     }
 }

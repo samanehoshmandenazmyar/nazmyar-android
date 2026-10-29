@@ -4,11 +4,17 @@ import android.util.Log
 import com.example.BuildConfig
 import com.example.domain.model.BehaviorRecord
 import com.example.domain.model.CustomRank
+import com.example.domain.model.HomeBanner
 import com.example.domain.model.RecordType
+import com.example.domain.model.ReportCard
 import com.example.domain.model.SeverityLevel
 import com.example.domain.model.Student
+import com.example.domain.model.SubjectGrade
 import com.example.domain.model.User
 import com.example.domain.model.UserRole
+import com.example.domain.model.toStudent
+import com.example.domain.model.sanitizePhoneNumber
+import com.example.domain.model.isValidPhoneNumber
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.Dns
@@ -135,6 +141,8 @@ object FirebaseRealtimeService {
             put("password", user.password)
             put("gender", user.gender)
             put("isRegisteredUser", user.isRegisteredUser)
+            put("hasLoggedIn", user.hasLoggedIn)
+            put("addedByStaff", user.addedByStaff)
             put("tag", user.tag ?: "")
             put("rankTitle", user.rankTitle)
             put("rankBadgeColorHex", user.rankBadgeColorHex)
@@ -145,17 +153,84 @@ object FirebaseRealtimeService {
             put("extraRankColors", JSONArray(user.extraRankColors))
             put("nationalId", user.nationalId)
             put("bio", user.bio)
+            put("faceRegistered", user.faceRegistered)
+            put("faceFrontUrl", user.faceFrontUrl ?: "")
+            put("faceLeftUrl", user.faceLeftUrl ?: "")
+            put("faceRightUrl", user.faceRightUrl ?: "")
             put("updatedAt", System.currentTimeMillis())
         }
         val body = json.toString().toRequestBody(JSON_MEDIA_TYPE)
 
-        executeWriteWithFailover("saveUser") { baseUrl ->
+        val success = executeWriteWithFailover("saveUser") { baseUrl ->
             val request = Request.Builder()
                 .url(ServerConfig.userItemUrl(user.id, baseUrl))
                 .put(body)
                 .build()
             client.newCall(request).execute().use { it.isSuccessful }
         }
+
+        // If user is a student, sync to /students if hasLoggedIn == true OR isRegisteredUser == true
+        if (user.role == UserRole.STUDENT) {
+            if (user.hasLoggedIn || user.isRegisteredUser) {
+                try {
+                    val student = user.toStudent().copy(hasLoggedIn = true, isRegistered = true)
+                    val cleanFirstName = student.firstName.trim().replace("دانش‌آموز", "").replace("دانش آموز", "").trim()
+                    val cleanLastName = student.lastName.trim().let {
+                        if (it == "دانش‌آموز" || it == "دانش آموز") "" else it.replace("دانش‌آموز", "").replace("دانش آموز", "").trim()
+                    }
+                    val sJson = JSONObject().apply {
+                        put("id", student.id)
+                        put("firstName", cleanFirstName)
+                        put("lastName", cleanLastName)
+                        put("fullName", student.fullName)
+                        put("name", student.fullName)
+                        put("studentCode", student.studentCode)
+                        put("grade", student.grade)
+                        put("className", student.className)
+                        put("gender", student.gender)
+                        put("schoolId", student.schoolId)
+                        put("score", student.score)
+                        put("parentPhone", student.parentPhone)
+                        put("phone", student.parentPhone)
+                        put("email", student.email)
+                        put("password", student.password)
+                        put("role", student.role.name)
+                        put("isRegistered", true)
+                        put("hasLoggedIn", true)
+                        put("addedByStaff", student.addedByStaff)
+                        put("rankTitle", student.rankTitle)
+                        put("rankColorHex", student.rankColorHex)
+                        put("permissions", JSONArray(student.permissions))
+                        put("profileImage", student.profileImage ?: "")
+                        put("extraRanks", JSONArray(student.extraRanks))
+                        put("extraRankColors", JSONArray(student.extraRankColors))
+                        put("nationalId", student.nationalId)
+                        put("bio", student.bio)
+                        put("updatedAt", System.currentTimeMillis())
+                    }
+                    val sBody = sJson.toString().toRequestBody(JSON_MEDIA_TYPE)
+                    executeWriteWithFailover("saveUserToStudents") { baseUrl ->
+                        val req = Request.Builder()
+                            .url(ServerConfig.studentItemUrl(student.id, baseUrl))
+                            .put(sBody)
+                            .build()
+                        client.newCall(req).execute().use { it.isSuccessful }
+                    }
+                } catch (_: Exception) {}
+            } else {
+                try {
+                    executeWriteWithFailover("removeUnloggedInUserFromStudents") { baseUrl ->
+                        val req = Request.Builder()
+                            .url(ServerConfig.studentItemUrl(user.id, baseUrl))
+                            .delete()
+                            .build()
+                        client.newCall(req).execute().use { it.isSuccessful }
+                    }
+                } catch (_: Exception) {}
+            }
+        }
+
+        success
     }
 
     suspend fun deleteUser(userId: String): Boolean = withContext(Dispatchers.IO) {
@@ -258,7 +333,7 @@ object FirebaseRealtimeService {
         return User(
             id = id,
             name = name,
-            phone = obj.optString("phone", ""),
+            phone = obj.optString("phone", "").sanitizePhoneNumber(),
             email = email,
             role = role,
             schoolId = obj.optString("schoolId", "sch_01"),
@@ -267,6 +342,8 @@ object FirebaseRealtimeService {
             password = obj.optString("password", "1234"),
             gender = obj.optString("gender", "نامشخص"),
             isRegisteredUser = obj.optBoolean("isRegisteredUser", true),
+            hasLoggedIn = obj.optBoolean("hasLoggedIn", obj.optBoolean("isLoggedIn", false)) || isCreatorUser,
+            addedByStaff = obj.optBoolean("addedByStaff", true),
             tag = if (isCreatorUser) "سازنده" else tag,
             rankTitle = rankTitle,
             rankBadgeColorHex = rankBadgeColorHex,
@@ -276,7 +353,11 @@ object FirebaseRealtimeService {
             extraRanks = extraRanks,
             extraRankColors = extraRankColors,
             nationalId = nationalId,
-            bio = bio
+            bio = bio,
+            faceRegistered = obj.optBoolean("faceRegistered", false),
+            faceFrontUrl = obj.optString("faceFrontUrl", "").ifBlank { null },
+            faceLeftUrl = obj.optString("faceLeftUrl", "").ifBlank { null },
+            faceRightUrl = obj.optString("faceRightUrl", "").ifBlank { null }
         )
     }
 
@@ -288,44 +369,7 @@ object FirebaseRealtimeService {
         }
         val cleanFullName = student.fullName
 
-        val json = JSONObject().apply {
-            put("id", student.id)
-            put("firstName", cleanFirstName)
-            put("lastName", cleanLastName)
-            put("fullName", cleanFullName)
-            put("name", cleanFullName)
-            put("studentCode", student.studentCode)
-            put("grade", student.grade)
-            put("className", student.className)
-            put("gender", student.gender)
-            put("schoolId", student.schoolId)
-            put("score", student.score)
-            put("parentPhone", student.parentPhone)
-            put("phone", student.parentPhone)
-            put("email", student.email)
-            put("password", student.password)
-            put("role", student.role.name)
-            put("rankTitle", student.rankTitle)
-            put("rankColorHex", student.rankColorHex)
-            put("permissions", JSONArray(student.permissions))
-            put("profileImage", student.profileImage ?: "")
-            put("extraRanks", JSONArray(student.extraRanks))
-            put("extraRankColors", JSONArray(student.extraRankColors))
-            put("nationalId", student.nationalId)
-            put("bio", student.bio)
-            put("updatedAt", System.currentTimeMillis())
-        }
-        val body = json.toString().toRequestBody(JSON_MEDIA_TYPE)
-
-        val success = executeWriteWithFailover("saveStudent") { baseUrl ->
-            val request = Request.Builder()
-                .url(ServerConfig.studentItemUrl(student.id, baseUrl))
-                .put(body)
-                .build()
-            client.newCall(request).execute().use { it.isSuccessful }
-        }
-
-        // Also ensure student account is written to /users so auth and cross-references succeed
+        // 1. ALWAYS write/update student account in /users so all school members exist in /users
         try {
             val userJson = JSONObject().apply {
                 put("id", student.id)
@@ -340,7 +384,8 @@ object FirebaseRealtimeService {
                 put("grade", student.grade)
                 put("className", student.className)
                 put("active", true)
-                put("isRegisteredUser", true)
+                put("isRegisteredUser", student.isRegistered)
+                put("hasLoggedIn", student.hasLoggedIn)
                 put("rankTitle", student.rankTitle)
                 put("rankColorHex", student.rankColorHex)
                 put("rankBadgeColorHex", try {
@@ -360,7 +405,62 @@ object FirebaseRealtimeService {
             }
         } catch (_: Exception) {}
 
-        success
+        // 2. Write to /students if student.hasLoggedIn == true OR student.isRegistered == true
+        if (student.hasLoggedIn || student.isRegistered) {
+            val json = JSONObject().apply {
+                put("id", student.id)
+                put("firstName", cleanFirstName)
+                put("lastName", cleanLastName)
+                put("fullName", cleanFullName)
+                put("name", cleanFullName)
+                put("studentCode", student.studentCode)
+                put("grade", student.grade)
+                put("className", student.className)
+                put("gender", student.gender)
+                put("schoolId", student.schoolId)
+                put("score", student.score)
+                put("parentPhone", student.parentPhone)
+                put("phone", student.parentPhone)
+                put("email", student.email)
+                put("password", student.password)
+                put("role", student.role.name)
+                put("isRegistered", student.isRegistered)
+                put("hasLoggedIn", student.hasLoggedIn || student.isRegistered)
+                put("addedByStaff", student.addedByStaff)
+                put("rankTitle", student.rankTitle)
+                put("rankColorHex", student.rankColorHex)
+                put("permissions", JSONArray(student.permissions))
+                put("profileImage", student.profileImage ?: "")
+                put("extraRanks", JSONArray(student.extraRanks))
+                put("extraRankColors", JSONArray(student.extraRankColors))
+                put("nationalId", student.nationalId)
+                put("bio", student.bio)
+                put("faceRegistered", student.faceRegistered)
+                put("faceFrontUrl", student.faceFrontUrl ?: "")
+                put("faceLeftUrl", student.faceLeftUrl ?: "")
+                put("faceRightUrl", student.faceRightUrl ?: "")
+                put("updatedAt", System.currentTimeMillis())
+            }
+            val body = json.toString().toRequestBody(JSON_MEDIA_TYPE)
+
+            executeWriteWithFailover("saveStudentToStudents") { baseUrl ->
+                val request = Request.Builder()
+                    .url(ServerConfig.studentItemUrl(student.id, baseUrl))
+                    .put(body)
+                    .build()
+                client.newCall(request).execute().use { it.isSuccessful }
+            }
+        } else {
+            // Remove from /students if not logged in or registered
+            executeWriteWithFailover("removeUnloggedInStudentFromStudents") { baseUrl ->
+                val request = Request.Builder()
+                    .url(ServerConfig.studentItemUrl(student.id, baseUrl))
+                    .delete()
+                    .build()
+                client.newCall(request).execute().use { it.isSuccessful }
+            }
+            true
+        }
     }
 
     suspend fun deleteStudent(studentId: String): Boolean = withContext(Dispatchers.IO) {
@@ -489,7 +589,7 @@ object FirebaseRealtimeService {
             gender = obj.optString("gender", "پسر"),
             schoolId = obj.optString("schoolId", "sch_01"),
             score = obj.optInt("score", 100),
-            parentPhone = obj.optString("parentPhone", obj.optString("phone", "")),
+            parentPhone = obj.optString("parentPhone", obj.optString("phone", "")).sanitizePhoneNumber(),
             email = email,
             password = password,
             role = role,
@@ -500,7 +600,14 @@ object FirebaseRealtimeService {
             extraRanks = extraRanks,
             extraRankColors = extraRankColors,
             nationalId = obj.optString("nationalId", ""),
-            bio = obj.optString("bio", "")
+            bio = obj.optString("bio", ""),
+            isRegistered = obj.optBoolean("isRegistered", obj.optBoolean("isRegisteredUser", false)),
+            hasLoggedIn = obj.optBoolean("hasLoggedIn", obj.optBoolean("isLoggedIn", false)),
+            addedByStaff = obj.optBoolean("addedByStaff", true),
+            faceRegistered = obj.optBoolean("faceRegistered", false),
+            faceFrontUrl = obj.optString("faceFrontUrl", "").ifBlank { null },
+            faceLeftUrl = obj.optString("faceLeftUrl", "").ifBlank { null },
+            faceRightUrl = obj.optString("faceRightUrl", "").ifBlank { null }
         )
     }
 
@@ -587,6 +694,109 @@ object FirebaseRealtimeService {
         )
     }
 
+    // --- HOME BANNERS MANAGEMENT ---
+    suspend fun saveBanner(banner: HomeBanner): Boolean = withContext(Dispatchers.IO) {
+        val json = JSONObject().apply {
+            put("id", banner.id)
+            put("title", banner.title)
+            put("imageUrl", banner.imageUrl)
+            put("targetClasses", JSONArray(banner.targetClasses))
+            put("linkUrl", banner.linkUrl ?: JSONObject.NULL)
+            put("createdAt", banner.createdAt)
+            put("updatedAt", System.currentTimeMillis())
+        }
+        val body = json.toString().toRequestBody(JSON_MEDIA_TYPE)
+
+        executeWriteWithFailover("saveBanner") { baseUrl ->
+            val request = Request.Builder()
+                .url(ServerConfig.bannerItemUrl(banner.id, baseUrl))
+                .put(body)
+                .build()
+            client.newCall(request).execute().use { it.isSuccessful }
+        }
+    }
+
+    suspend fun deleteBanner(bannerId: String): Boolean = withContext(Dispatchers.IO) {
+        executeWriteWithFailover("deleteBanner") { baseUrl ->
+            val request = Request.Builder()
+                .url(ServerConfig.bannerItemUrl(bannerId, baseUrl))
+                .delete()
+                .build()
+            client.newCall(request).execute().use { it.isSuccessful }
+        }
+    }
+
+    suspend fun clearAllBanners(): Boolean = withContext(Dispatchers.IO) {
+        executeWriteWithFailover("clearAllBanners") { baseUrl ->
+            val request = Request.Builder()
+                .url(ServerConfig.bannersUrl(baseUrl))
+                .delete()
+                .build()
+            client.newCall(request).execute().use { it.isSuccessful }
+        }
+    }
+
+    suspend fun fetchBanners(): List<HomeBanner>? = withContext(Dispatchers.IO) {
+        executeWithFailover("fetchBanners") { baseUrl ->
+            val request = Request.Builder()
+                .url(ServerConfig.bannersUrl(baseUrl))
+                .get()
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return@use null
+                val body = response.body?.string() ?: return@use null
+                if (body == "null" || body.isBlank()) return@use emptyList<HomeBanner>()
+
+                val list = mutableListOf<HomeBanner>()
+                if (body.trimStart().startsWith("{")) {
+                    val root = JSONObject(body)
+                    val keys = root.keys()
+                    while (keys.hasNext()) {
+                        val key = keys.next()
+                        val obj = root.optJSONObject(key) ?: continue
+                        parseSingleBanner(key, obj)?.let { list.add(it) }
+                    }
+                } else if (body.trimStart().startsWith("[")) {
+                    val arr = JSONArray(body)
+                    for (i in 0 until arr.length()) {
+                        val obj = arr.optJSONObject(i) ?: continue
+                        val key = obj.optString("id", "banner_$i")
+                        parseSingleBanner(key, obj)?.let { list.add(it) }
+                    }
+                }
+                list.sortedByDescending { it.createdAt }
+            }
+        }
+    }
+
+    private fun parseSingleBanner(key: String, obj: JSONObject): HomeBanner? {
+        val id = obj.optString("id", key)
+        val title = obj.optString("title", "")
+        val imageUrl = obj.optString("imageUrl", "")
+        if (imageUrl.isBlank()) return null
+
+        val targetClasses = mutableListOf<String>()
+        val tcArray = obj.optJSONArray("targetClasses")
+        if (tcArray != null) {
+            for (i in 0 until tcArray.length()) {
+                val tc = tcArray.optString(i)
+                if (tc.isNotBlank()) targetClasses.add(tc)
+            }
+        }
+        val linkUrl = if (obj.has("linkUrl") && !obj.isNull("linkUrl")) obj.optString("linkUrl") else null
+        val createdAt = obj.optLong("createdAt", System.currentTimeMillis())
+
+        return HomeBanner(
+            id = id,
+            title = title,
+            imageUrl = imageUrl,
+            targetClasses = targetClasses,
+            linkUrl = linkUrl,
+            createdAt = createdAt
+        )
+    }
+
     // --- BEHAVIOR RECORDS MANAGEMENT ---
     suspend fun saveRecord(record: BehaviorRecord): Boolean = withContext(Dispatchers.IO) {
         val json = JSONObject().apply {
@@ -607,6 +817,7 @@ object FirebaseRealtimeService {
             put("createdBy", record.createdBy)
             put("createdByRole", record.createdByRole.name)
             put("parentNotified", record.parentNotified)
+            put("imageUrl", record.imageUrl ?: "")
             put("status", record.status)
             put("updatedAt", System.currentTimeMillis())
         }
@@ -696,6 +907,7 @@ object FirebaseRealtimeService {
             createdBy = obj.optString("createdBy", "مدیر"),
             createdByRole = role,
             parentNotified = obj.optBoolean("parentNotified", true),
+            imageUrl = obj.optString("imageUrl", "").ifBlank { null },
             status = obj.optString("status", "تأیید شده")
         )
     }
@@ -718,6 +930,32 @@ object FirebaseRealtimeService {
                 .put(body)
                 .build()
             client.newCall(request).execute().use { it.isSuccessful }
+        }
+    }
+
+    suspend fun purgeUnloggedInStudentsFromRemoteServer(): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val remoteStudents = fetchStudents() ?: return@withContext false
+            var countRemoved = 0
+            for (student in remoteStudents) {
+                if (!student.hasLoggedIn && !student.isRegistered) {
+                    executeWriteWithFailover("purgeUnloggedInStudent") { baseUrl ->
+                        val request = Request.Builder()
+                            .url(ServerConfig.studentItemUrl(student.id, baseUrl))
+                            .delete()
+                            .build()
+                        client.newCall(request).execute().use { it.isSuccessful }
+                    }
+                    countRemoved++
+                }
+            }
+            if (countRemoved > 0) {
+                Log.d(TAG, "Purged $countRemoved unloggedIn/unregistered students from /students on server")
+            }
+            true
+        } catch (e: Exception) {
+            Log.w(TAG, "Error purging unloggedIn students: ${e.message}")
+            false
         }
     }
 
@@ -893,6 +1131,199 @@ object FirebaseRealtimeService {
             com.example.core.session.SessionManager.clearLastKnownUpdate()
         }
         success
+    }
+
+    suspend fun fetchReportCards(): List<ReportCard>? = withContext(Dispatchers.IO) {
+        executeWithFailover<List<ReportCard>>("fetchReportCards") { baseUrl ->
+            try {
+                val request = Request.Builder()
+                    .url(ServerConfig.reportCardsUrl(baseUrl))
+                    .get()
+                    .build()
+
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) return@executeWithFailover null
+                    val body = response.body?.string() ?: return@executeWithFailover null
+                    if (body == "null" || body.isBlank()) return@executeWithFailover emptyList<ReportCard>()
+
+                    val list = mutableListOf<ReportCard>()
+                    val root = JSONObject(body)
+                    val keys = root.keys()
+                    while (keys.hasNext()) {
+                        val key = keys.next()
+                        val obj = root.optJSONObject(key) ?: continue
+
+                        val subjArr = obj.optJSONArray("subjects") ?: JSONArray()
+                        val subList = mutableListOf<SubjectGrade>()
+                        for (i in 0 until subjArr.length()) {
+                            val sObj = subjArr.optJSONObject(i) ?: continue
+                            subList.add(
+                                SubjectGrade(
+                                    rowNumber = sObj.optInt("rowNumber", i + 1),
+                                    subjectName = sObj.optString("subjectName", ""),
+                                    term1Continuous = sObj.optString("term1Continuous", "۲۰"),
+                                    term1Final = sObj.optString("term1Final", "۲۰"),
+                                    term1Score = sObj.optString("term1Score", "۲۰"),
+                                    term2Continuous = sObj.optString("term2Continuous", "۲۰"),
+                                    term2Final = sObj.optString("term2Final", "۲۰"),
+                                    term2ScoreWithCoefficient = sObj.optString("term2ScoreWithCoefficient", "۴۰"),
+                                    annualScore = sObj.optString("annualScore", "۲۰"),
+                                    summerFinal = sObj.optString("summerFinal", ""),
+                                    summerAverage = sObj.optString("summerAverage", ""),
+                                    summerAnnual = sObj.optString("summerAnnual", ""),
+                                    majorFieldSelection = sObj.optString("majorFieldSelection", ""),
+                                    result = sObj.optString("result", "قبول"),
+                                    notes = sObj.optString("notes", ""),
+                                    isContinuousTerm1Hatched = sObj.optBoolean("isContinuousTerm1Hatched", false),
+                                    isContinuousTerm2Hatched = sObj.optBoolean("isContinuousTerm2Hatched", false)
+                                )
+                            )
+                        }
+
+                        list.add(
+                            ReportCard(
+                                id = obj.optString("id", key),
+                                studentId = obj.optString("studentId", ""),
+                                studentCode = obj.optString("studentCode", ""),
+                                nationalId = obj.optString("nationalId", ""),
+                                studentFirstName = obj.optString("studentFirstName", ""),
+                                studentLastName = obj.optString("studentLastName", ""),
+                                fatherName = obj.optString("fatherName", ""),
+                                gender = obj.optString("gender", "پسر"),
+                                birthDate = obj.optString("birthDate", "۱۳۹۱/۱۲/۱۶"),
+                                birthPlace = obj.optString("birthPlace", "کنگان"),
+                                studentPhoto = obj.optString("studentPhoto").ifBlank { null },
+                                province = obj.optString("province", "بوشهر"),
+                                region = obj.optString("region", "دیر"),
+                                schoolName = obj.optString("schoolName", "دبیرستان شهید رجایی"),
+                                schoolCode = obj.optString("schoolCode", "۹۵۰۹۶۸۷۳"),
+                                grade = obj.optString("grade", "هفتم"),
+                                className = obj.optString("className", "۷/۱"),
+                                schoolType = obj.optString("schoolType", "دولتی"),
+                                schoolLocation = obj.optString("schoolLocation", "شهری"),
+                                schoolFeature = obj.optString("schoolFeature", "عادی"),
+                                educationalPeriod = obj.optString("educationalPeriod", "دوره اول متوسطه"),
+                                academicYear = obj.optString("academicYear", "۱۴۰۳-۱۴۰۴"),
+                                semesterTitle = obj.optString("semesterTitle", "ضمن سال"),
+                                issueDate = obj.optString("issueDate", "۱۴۰۴/۰۳/۲۵"),
+                                subjects = if (subList.isEmpty()) ReportCard.defaultSubjectsList() else subList,
+                                totalTerm1 = obj.optString("totalTerm1", "۲۸۰"),
+                                totalAnnual = obj.optString("totalAnnual", "۵۶۰"),
+                                gpaTerm1 = obj.optString("gpaTerm1", "۲۰"),
+                                gpaAnnual = obj.optString("gpaAnnual", "۲۰"),
+                                gpaInWords = obj.optString("gpaInWords", "بیست"),
+                                conductTerm1 = obj.optString("conductTerm1", "عالی"),
+                                conductTerm2 = obj.optString("conductTerm2", "عالی"),
+                                finalStatus = obj.optString("finalStatus", "قبول خرداد"),
+                                principalName = obj.optString("principalName", "مهدی فاریابی"),
+                                executiveDeputyName = obj.optString("executiveDeputyName", "یاسین دراهکی"),
+                                certificationText = obj.optString("certificationText", "گواهی می‌شود دانش‌آموز با مشخصات فوق در ارزشیابی خرداد ماه سال ۱۴۰۴ در پایه هفتم شرکت و قبولی خرداد شده است مندرجات این کارنامه با مندرجات دفتر نتایج ارزشیابی مطابقت دارد."),
+                                indicatorNumber = obj.optString("indicatorNumber", "۱۴۰۴-۵۰۸-۲"),
+                                createdBy = obj.optString("createdBy", ""),
+                                createdAt = obj.optLong("createdAt", System.currentTimeMillis()),
+                                updatedAt = obj.optLong("updatedAt", System.currentTimeMillis())
+                            )
+                        )
+                    }
+                    list
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Error fetching report cards from $baseUrl: ${e.message}")
+                null
+            }
+        }
+    }
+
+    suspend fun saveReportCard(card: ReportCard): Boolean = withContext(Dispatchers.IO) {
+        val json = JSONObject().apply {
+            put("id", card.id)
+            put("studentId", card.studentId)
+            put("studentCode", card.studentCode)
+            put("nationalId", card.nationalId)
+            put("studentFirstName", card.studentFirstName)
+            put("studentLastName", card.studentLastName)
+            put("fatherName", card.fatherName)
+            put("gender", card.gender)
+            put("birthDate", card.birthDate)
+            put("birthPlace", card.birthPlace)
+            put("studentPhoto", card.studentPhoto ?: "")
+
+            put("province", card.province)
+            put("region", card.region)
+            put("schoolName", card.schoolName)
+            put("schoolCode", card.schoolCode)
+            put("grade", card.grade)
+            put("className", card.className)
+            put("schoolType", card.schoolType)
+            put("schoolLocation", card.schoolLocation)
+            put("schoolFeature", card.schoolFeature)
+            put("educationalPeriod", card.educationalPeriod)
+            put("academicYear", card.academicYear)
+            put("semesterTitle", card.semesterTitle)
+            put("issueDate", card.issueDate)
+
+            put("totalTerm1", card.totalTerm1)
+            put("totalAnnual", card.totalAnnual)
+            put("gpaTerm1", card.gpaTerm1)
+            put("gpaAnnual", card.gpaAnnual)
+            put("gpaInWords", card.gpaInWords)
+            put("conductTerm1", card.conductTerm1)
+            put("conductTerm2", card.conductTerm2)
+            put("finalStatus", card.finalStatus)
+
+            put("principalName", card.principalName)
+            put("executiveDeputyName", card.executiveDeputyName)
+            put("certificationText", card.certificationText)
+            put("indicatorNumber", card.indicatorNumber)
+            put("createdBy", card.createdBy)
+            put("createdAt", card.createdAt)
+            put("updatedAt", card.updatedAt)
+
+            val subjArr = JSONArray()
+            card.subjects.forEach { s ->
+                val sObj = JSONObject().apply {
+                    put("rowNumber", s.rowNumber)
+                    put("subjectName", s.subjectName)
+                    put("term1Continuous", s.term1Continuous)
+                    put("term1Final", s.term1Final)
+                    put("term1Score", s.term1Score)
+                    put("term2Continuous", s.term2Continuous)
+                    put("term2Final", s.term2Final)
+                    put("term2ScoreWithCoefficient", s.term2ScoreWithCoefficient)
+                    put("annualScore", s.annualScore)
+                    put("summerFinal", s.summerFinal)
+                    put("summerAverage", s.summerAverage)
+                    put("summerAnnual", s.summerAnnual)
+                    put("majorFieldSelection", s.majorFieldSelection)
+                    put("result", s.result)
+                    put("notes", s.notes)
+                    put("isContinuousTerm1Hatched", s.isContinuousTerm1Hatched)
+                    put("isContinuousTerm2Hatched", s.isContinuousTerm2Hatched)
+                }
+                subjArr.put(sObj)
+            }
+            put("subjects", subjArr)
+        }
+
+        val body = json.toString().toRequestBody(JSON_MEDIA_TYPE)
+        val cardId = if (card.id.isNotBlank()) card.id else "rc_${card.studentCode}"
+        executeWriteWithFailover("saveReportCard") { baseUrl ->
+            val request = Request.Builder()
+                .url(ServerConfig.reportCardItemUrl(cardId, baseUrl))
+                .put(body)
+                .build()
+            client.newCall(request).execute().use { it.isSuccessful }
+        }
+    }
+
+    suspend fun deleteReportCard(cardId: String): Boolean = withContext(Dispatchers.IO) {
+        executeWriteWithFailover("deleteReportCard") { baseUrl ->
+            val request = Request.Builder()
+                .url(ServerConfig.reportCardItemUrl(cardId, baseUrl))
+                .delete()
+                .build()
+            client.newCall(request).execute().use { it.isSuccessful }
+        }
     }
 }
 

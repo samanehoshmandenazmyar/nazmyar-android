@@ -8,6 +8,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -35,6 +37,12 @@ import com.example.domain.model.RankPermission
 import com.example.data.demo.DemoData
 import com.example.domain.model.UserRole
 import androidx.compose.material.icons.outlined.Notifications
+import android.widget.Toast
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.ui.platform.LocalContext
+import com.example.core.auth.ParentAccessManager
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Card
@@ -52,10 +60,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import com.example.domain.model.Poll
 import androidx.compose.foundation.layout.heightIn
 import com.example.domain.model.matchesQuery
 import com.example.ui.theme.VazirmatnFontFamily
@@ -80,6 +90,7 @@ import com.example.domain.model.SeverityLevel
 import com.example.domain.model.Student
 import com.example.domain.model.User
 import com.example.domain.model.toPersianDigits
+import com.example.domain.model.isValidPhoneNumber
 import com.example.ui.theme.IncidentRed
 import com.example.ui.theme.IncidentRedContainer
 import com.example.ui.theme.OnIncidentRedContainer
@@ -174,16 +185,17 @@ fun UserRankBadge(
                 isLarge = isLarge
             )
         } else if (user.rankTitle.isBlank() && user.extraRanks.isEmpty()) {
+            val fallbackTitle = user.role.farsiTitle
             Surface(
                 modifier = Modifier.testTag("user_rank_badge_empty"),
                 shape = RoundedCornerShape(if (isLarge) 10.dp else 6.dp),
-                color = Color(0xFF64748B).copy(alpha = 0.12f),
-                border = BorderStroke(1.dp, Color(0xFF64748B).copy(alpha = 0.25f))
+                color = SchoolBluePrimary.copy(alpha = 0.12f),
+                border = BorderStroke(1.dp, SchoolBluePrimary.copy(alpha = 0.25f))
             ) {
                 Text(
-                    text = "بدون رنک",
+                    text = fallbackTitle,
                     style = if (isLarge) MaterialTheme.typography.labelMedium else MaterialTheme.typography.labelSmall,
-                    color = Color(0xFF64748B),
+                    color = SchoolBluePrimary,
                     modifier = Modifier.padding(
                         horizontal = if (isLarge) 12.dp else if (isSmall) 6.dp else 8.dp,
                         vertical = if (isLarge) 5.dp else if (isSmall) 2.dp else 3.dp
@@ -634,17 +646,21 @@ fun BehaviorRecordCard(
                 Spacer(modifier = Modifier.height(2.dp))
             }
 
+            val titleText = record.title.trim()
+            val descText = record.description.trim()
+            val isDuplicate = titleText.equals(descText, ignoreCase = true) || descText.isBlank()
+
             Text(
-                text = record.title,
+                text = if (titleText.isNotBlank()) titleText else record.type.farsiTitle,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface
             )
 
-            if (record.description.isNotBlank()) {
+            if (!isDuplicate) {
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = record.description,
+                    text = descText,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     lineHeight = 20.sp
@@ -662,16 +678,21 @@ fun BehaviorRecordCard(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Surface(
-                        shape = RoundedCornerShape(6.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant
-                    ) {
-                        Text(
-                            text = record.category,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
+                    val showCategoryPill = record.category.isNotBlank() &&
+                        !record.category.trim().equals(record.type.farsiTitle.trim(), ignoreCase = true)
+
+                    if (showCategoryPill) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant
+                        ) {
+                            Text(
+                                text = record.category,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
                     }
 
                     record.severity?.let {
@@ -684,19 +705,12 @@ fun BehaviorRecordCard(
                         val sign = if (pts > 0) "+$pts" else "$pts"
                         val pColor = if (pts > 0) PositiveGreen else IncidentRed
                         Text(
-                            text = "${sign.toPersianDigits()} امتیاز",
+                            text = sign.toPersianDigits(),
                             style = MaterialTheme.typography.labelSmall,
                             color = pColor,
                             fontWeight = FontWeight.Bold
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
                     }
-
-                    Text(
-                        text = "ثبت: ${record.createdBy}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
                 }
             }
         }
@@ -726,6 +740,7 @@ fun SeverityBadge(severity: SeverityLevel) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SpecialUserListItemCard(
     user: User,
@@ -739,40 +754,6 @@ fun SpecialUserListItemCard(
         user.studentCode == "454545" ||
         user.name.trim() == "سید حسین موسوی نژاد" ||
         user.phone == "09923072572"
-
-    if (isCreator) {
-        val creatorStudent = matchingStudent ?: Student(
-            id = user.id.ifBlank { "user_creator_hossein" },
-            firstName = "سید حسین",
-            lastName = "موسوی نژاد",
-            studentCode = "454545",
-            nationalId = "454545",
-            grade = "پایه هشتم",
-            className = "کلاس 8/2",
-            parentPhone = user.phone.ifBlank { "09923072572" },
-            email = "hosseinvexter@gmail.com",
-            rankTitle = "سازنده",
-            rankColorHex = "#1E40AF",
-            permissions = listOf(
-                RankPermission.REGISTER_POSITIVE,
-                RankPermission.REGISTER_DISCIPLINARY,
-                RankPermission.VIEW_REPORTS,
-                RankPermission.ACCESS_GAMES,
-                RankPermission.VIEW_STUDENT_PROFILES,
-                RankPermission.EDIT_CLASS_INFO,
-                RankPermission.SPECIAL_BADGE
-            ),
-            isRegistered = true,
-            schoolId = user.schoolId.ifBlank { DemoData.DEFAULT_SCHOOL_ID }
-        )
-        StudentListItemCard(
-            student = creatorStudent,
-            allUsers = allUsers,
-            onClick = onClick,
-            modifier = modifier
-        )
-        return
-    }
 
     Card(
         modifier = modifier
@@ -792,7 +773,7 @@ fun SpecialUserListItemCard(
         ) {
             Box(
                 modifier = Modifier
-                    .size(50.dp)
+                    .size(52.dp)
                     .clip(CircleShape)
                     .background(SchoolBlueContainer),
                 contentAlignment = Alignment.Center
@@ -811,39 +792,131 @@ fun SpecialUserListItemCard(
 
             Column(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                // Name only (no role tag like "مدیر مدرسه" or "مسئول پرورشی")
+                // Gather all valid ranks - GUARANTEED FOR EVERY SINGLE SPECIAL USER
+                val effectiveRanks = remember(user, matchingStudent) {
+                    val ranks = mutableListOf<Pair<String, String>>()
+
+                    fun isExcluded(r: String?): Boolean {
+                        if (r.isNullOrBlank()) return true
+                        val n = r.trim().replace("‌", " ").replace("\\s+".toRegex(), " ")
+                        return n == "دانش آموز" || n == "پدر دانش آموز" || n == "مادر دانش آموز"
+                    }
+
+                    // 1. Creator rank
+                    if (isCreator) {
+                        ranks.add("سازنده" to "#1E40AF")
+                    }
+
+                    // 2. Primary rank from student or user
+                    val primaryRank = matchingStudent?.rankTitle?.takeIf { !isExcluded(it) }
+                        ?: user.rankTitle.takeIf { !isExcluded(it) }
+
+                    val primaryColor = matchingStudent?.rankColorHex?.takeIf { it.isNotBlank() && it != "#64748B" }
+                        ?: user.rankColorHex.takeIf { it.isNotBlank() && it != "#64748B" }
+                        ?: "#D97706"
+
+                    if (primaryRank != null && !isCreator && ranks.none { it.first == primaryRank }) {
+                        ranks.add(primaryRank to primaryColor)
+                    }
+
+                    // 3. Extra ranks from matching student
+                    matchingStudent?.extraRanks?.forEachIndexed { i, r ->
+                        if (!isExcluded(r) && ranks.none { it.first == r }) {
+                            val color = matchingStudent.extraRankColors.getOrNull(i) ?: "#8B5CF6"
+                            ranks.add(r to color)
+                        }
+                    }
+
+                    // 4. Extra ranks from user
+                    user.extraRanks.forEachIndexed { i, r ->
+                        if (!isExcluded(r) && ranks.none { it.first == r }) {
+                            val color = user.extraRankColors.getOrNull(i) ?: "#8B5CF6"
+                            ranks.add(r to color)
+                        }
+                    }
+
+                    // 5. If ranks is still empty, deduce standard rank based on role / identity so that EVERYONE has a rank badge!
+                    if (ranks.isEmpty()) {
+                        val norm = user.name.replace(" ", "").replace("‌", "")
+                        when {
+                            isCreator || norm.contains("حسینموسوی") || user.studentCode == "454545" -> {
+                                ranks.add("سازنده" to "#1E40AF")
+                            }
+                            user.id == "user_manager_mehdi_faryabi" || norm.contains("مهدیفاریابی") || user.role == UserRole.MANAGER -> {
+                                ranks.add("مدیر مدرسه" to "#D97706")
+                            }
+                            user.id == "user_counselor_yasin_dorahaki" || norm.contains("یاسیندراهکی") || user.role == UserRole.COUNSELOR -> {
+                                ranks.add("معاون پرورشی" to "#059669")
+                            }
+                            user.role == UserRole.VICE_PRINCIPAL -> {
+                                ranks.add("معاون آموزشی/انضباطی" to "#7C3AED")
+                            }
+                            user.role == UserRole.TEACHER -> {
+                                ranks.add("دبیر" to "#2563EB")
+                            }
+                            user.tag?.isNotBlank() == true && !isExcluded(user.tag) -> {
+                                ranks.add(user.tag to "#0D9488")
+                            }
+                            matchingStudent != null -> {
+                                ranks.add("دانش‌آموز ویژه" to "#3B82F6")
+                            }
+                            else -> {
+                                ranks.add(user.role.farsiTitle to "#64748B")
+                            }
+                        }
+                    }
+
+                    ranks.distinctBy { it.first }
+                }
+
+                // Name Row
                 Text(
                     text = user.name,
                     style = MaterialTheme.typography.titleMedium.copy(
                         fontFamily = VazirmatnFontFamily,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
-                    )
+                    ),
+                    lineHeight = 22.sp
                 )
 
-                // ONLY CONTACT PHONE NUMBER (no role text, no "نقش: ...")
-                if (user.phone.isNotBlank()) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Phone,
-                            contentDescription = null,
-                            tint = SchoolBluePrimary,
-                            modifier = Modifier.size(15.dp)
-                        )
-                        Text(
-                            text = "تماس: ${user.phone.toPersianDigits()}",
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                fontFamily = VazirmatnFontFamily,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.primary
-                            )
+                // Ranks FlowRow: Visually prominent and guaranteed for all special individuals
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    effectiveRanks.forEach { (rTitle, rColor) ->
+                        StudentRankBadge(
+                            rankTitle = rTitle,
+                            rankColorHex = rColor,
+                            isSmall = true
                         )
                     }
+                }
+
+                // Details (Grade / Class for student special members ONLY)
+                val isStaffUser = user.role == UserRole.MANAGER ||
+                    user.role == UserRole.VICE_PRINCIPAL ||
+                    user.role == UserRole.COUNSELOR ||
+                    user.role == UserRole.TEACHER ||
+                    user.isCreator
+                val isStudentMember = !isStaffUser && (user.role == UserRole.STUDENT || (matchingStudent != null && matchingStudent.role == UserRole.STUDENT))
+                val gradeInfo = if (isStudentMember) {
+                    matchingStudent?.let { "${it.grade} - ${it.className}" }
+                        ?: if (user.studentCode.isNotBlank()) "کد دانش‌آموزی: ${user.studentCode.toPersianDigits()}" else null
+                } else null
+
+                if (!gradeInfo.isNullOrBlank()) {
+                    Text(
+                        text = gradeInfo,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontFamily = VazirmatnFontFamily,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    )
                 }
             }
         }
@@ -857,10 +930,14 @@ fun StudentListItemCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val normStudentName = AllowedStudentsRegistry.normalize(student.fullName)
     val sCode = student.studentCode.trim()
     val sId = student.id
     val isCreatorCard = (sId == "user_creator_hossein" || sCode == "454545" || normStudentName == AllowedStudentsRegistry.normalize("سید حسین موسوی نژاد"))
+
+    var showMenu by remember { mutableStateOf(false) }
+    var isSingleParent by remember(sCode) { mutableStateOf<Boolean>(ParentAccessManager.isSingleParentModeEnabled(context, sCode)) }
 
     val fatherUser = remember(allUsers, student) {
         allUsers.firstOrNull { u ->
@@ -1083,7 +1160,7 @@ fun StudentListItemCard(
                             )
                         }
 
-                        if (student.parentPhone.isNotBlank()) {
+                        if (student.parentPhone.isValidPhoneNumber()) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -1105,19 +1182,61 @@ fun StudentListItemCard(
                             }
                         }
 
-                        // Registration status tag if not registered in the app
-                        if (!student.isRegistered) {
+                        // Login & Server Status Badge (ورود یافته به سامانه / افزوده‌شده توسط مدرسه)
+                        val hasUserLoggedIn = isCreatorCard || (student.hasLoggedIn && student.isRegistered)
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = if (hasUserLoggedIn) Color(0xFFDCFCE7) else MaterialTheme.colorScheme.surfaceVariant,
+                            border = BorderStroke(0.5.dp, if (hasUserLoggedIn) Color(0xFF86EFAC) else MaterialTheme.colorScheme.outlineVariant)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(3.dp)
+                            ) {
+                                if (hasUserLoggedIn) {
+                                    Icon(
+                                        imageVector = Icons.Default.CheckCircle,
+                                        contentDescription = null,
+                                        tint = Color(0xFF15803D),
+                                        modifier = Modifier.size(11.dp)
+                                    )
+                                    Text(
+                                        text = "ورود یافته به سامانه ✓",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontFamily = VazirmatnFontFamily,
+                                            color = Color(0xFF15803D),
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 10.sp
+                                        )
+                                    )
+                                } else {
+                                    Text(
+                                        text = "افزوده‌شده توسط مدرسه (در انتظار ورود)",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontFamily = VazirmatnFontFamily,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            fontSize = 10.sp
+                                        )
+                                    )
+                                }
+                            }
+                        }
+
+                        if (isSingleParent) {
                             Spacer(modifier = Modifier.height(2.dp))
                             Surface(
                                 shape = RoundedCornerShape(6.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant,
-                                border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant)
+                                color = Color(0xFFFEF3C7),
+                                border = BorderStroke(0.5.dp, Color(0xFFF59E0B))
                             ) {
                                 Text(
-                                    text = "در برنامه ثبت‌نام نکرده است",
+                                    text = "تک‌والدی (ورود ۱ نفر کافی است)",
                                     style = MaterialTheme.typography.labelSmall.copy(
                                         fontFamily = VazirmatnFontFamily,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        color = Color(0xFFB45309),
+                                        fontWeight = FontWeight.Bold,
                                         fontSize = 10.sp
                                     ),
                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
@@ -1126,7 +1245,44 @@ fun StudentListItemCard(
                         }
                     }
 
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+
+                    Box {
+                        IconButton(
+                            onClick = { showMenu = true },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.MoreVert,
+                                contentDescription = "گزینه‌های بیشتر دانش‌آموز",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = showMenu,
+                            onDismissRequest = { showMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        text = if (isSingleParent) "تغییر شرط ورود اولیاء به دووالد (نیازمند هر دو)" else "تغییر شرط ورود اولیاء به تک‌والد (ورود یک نفر کافی است)",
+                                        style = MaterialTheme.typography.bodyMedium.copy(fontFamily = VazirmatnFontFamily)
+                                    )
+                                },
+                                onClick = {
+                                    val newMode = !isSingleParent
+                                    ParentAccessManager.setSingleParentMode(context, sCode, newMode)
+                                    isSingleParent = newMode
+                                    showMenu = false
+                                    val msg = if (newMode) "شرط ورود اولیاء برای ${student.fullName} به تک‌والد تغییر یافت (ورود ۱ نفر کافی است)."
+                                              else "شرط ورود اولیاء برای ${student.fullName} به دووالد تغییر یافت (ورود هر دو والد الزامی است)."
+                                    Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                                }
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(4.dp))
 
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
@@ -1237,16 +1393,29 @@ fun StudentListItemCard(
 }
 
 @Composable
-fun PtaElectionHomeBanner(
+fun PollsHomeBanner(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     hasVoted: Boolean = false
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        com.example.core.voting.PollsManager.init(context)
+    }
+
+    val polls by com.example.core.voting.PollsManager.polls.collectAsState()
+    val activePolls = remember(polls) { polls.filter { it.isActive } }
+
+    // If no active poll exists, do NOT display poll card on Home screen!
+    if (activePolls.isEmpty()) return
+
+    val latestPoll = activePolls.first()
+
     Card(
         modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .testTag("pta_election_home_banner"),
+            .testTag("polls_home_banner"),
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
@@ -1279,35 +1448,46 @@ fun PtaElectionHomeBanner(
             Spacer(modifier = Modifier.width(12.dp))
 
             Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
                     Text(
-                        text = "انتخاب انجمن و اولیا و مربیان",
+                        text = latestPoll.title,
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Surface(
-                        shape = RoundedCornerShape(6.dp),
-                        color = Color(0xFFFEF3C7)
-                    ) {
-                        Text(
-                            text = "موقت",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color(0xFFB45309),
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
+
+                    // Tag badge: ONLY for temporary polls (no tag for permanent polls)
+                    if (!latestPoll.isPermanent) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = Color(0xFFFEF3C7),
+                            border = BorderStroke(0.5.dp, Color(0xFFF59E0B))
+                        ) {
+                            Text(
+                                text = if (latestPoll.expiryDate.isNotBlank()) "موقت (تا ${latestPoll.expiryDate.toPersianDigits()})" else "موقت",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFFB45309),
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
                     }
                 }
 
                 Spacer(modifier = Modifier.height(2.dp))
 
                 Text(
-                    text = if (hasVoted) "رأی شما ثبت شده است • برای مشاهده درصدها و نتایج کلیک کنید"
-                           else "رأی‌گیری آنلاین و مشاهده ۱۰ نامزد محترم (ثبت فوری رأی)",
+                    text = latestPoll.description.ifBlank { "جهت شرکت در نظرسنجی و ثبت رأی لمس کنید" },
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
 
@@ -1315,12 +1495,21 @@ fun PtaElectionHomeBanner(
 
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = "ورود به بخش رأی‌گیری",
+                contentDescription = "ورود به سامانه نظرسنجی",
                 tint = SchoolBluePrimary,
-                modifier = Modifier.size(20.dp)
+                modifier = Modifier.size(18.dp)
             )
         }
     }
+}
+
+@Composable
+fun PtaElectionHomeBanner(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    hasVoted: Boolean = false
+) {
+    PollsHomeBanner(onClick = onClick, modifier = modifier, hasVoted = hasVoted)
 }
 
 /**

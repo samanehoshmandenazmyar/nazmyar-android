@@ -13,8 +13,14 @@ import com.example.domain.repository.StudentRepository
  * Service Locator / Dependency Container.
  */
 object AppContainer {
+    lateinit var appContext: Context
+        private set
+
     fun init(context: Context) {
+        appContext = context.applicationContext
         SessionManager.init(context)
+        com.example.core.auth.ParentAccessManager.init(context)
+        com.example.core.notification.NotificationHelper.createNotificationChannel(appContext)
         demoRepo.restoreSavedSession()
     }
 

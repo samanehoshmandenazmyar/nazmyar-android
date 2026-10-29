@@ -19,9 +19,16 @@ object NetworkMonitor {
     fun isOnline(context: Context): Boolean {
         val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
             ?: return false
-        val activeNetwork = connectivityManager.activeNetwork ?: return false
-        val capabilities = connectivityManager.getNetworkCapabilities(activeNetwork) ?: return false
-        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        val activeNetwork = connectivityManager.activeNetwork
+        if (activeNetwork != null) {
+            val capabilities = connectivityManager.getNetworkCapabilities(activeNetwork)
+            if (capabilities != null && capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) {
+                return true
+            }
+        }
+        @Suppress("DEPRECATION")
+        val networkInfo = connectivityManager.activeNetworkInfo
+        return networkInfo != null && networkInfo.isConnected
     }
 
     fun observeNetwork(context: Context): Flow<Boolean> = callbackFlow {
@@ -65,6 +72,53 @@ object NetworkMonitor {
             } catch (_: Exception) {}
         }
     }.distinctUntilChanged()
+
+    suspend fun checkRealInternetAccess(context: Context? = null): Boolean = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        val targets = mutableListOf<String>()
+        val serverCandidates = ServerConfig.getCandidateUrls()
+        for (base in serverCandidates) {
+            targets.add("${base.removeSuffix("/")}/.json?shallow=true")
+        }
+        targets.add("https://clients3.google.com/generate_204")
+        targets.add("https://www.google.com/generate_204")
+        targets.add("https://www.cloudflare.com/cdn-cgi/trace")
+
+        for (target in targets) {
+            try {
+                val url = java.net.URL(target)
+                val conn = (url.openConnection() as java.net.HttpURLConnection).apply {
+                    connectTimeout = 2500
+                    readTimeout = 2500
+                    requestMethod = "GET"
+                    instanceFollowRedirects = true
+                    useCaches = false
+                }
+                val code = conn.responseCode
+                conn.disconnect()
+                if (code in 200..399 || code == 401 || code == 403) return@withContext true
+            } catch (_: Exception) {
+                // try next target
+            }
+        }
+        try {
+            java.net.Socket().use { socket ->
+                socket.connect(java.net.InetSocketAddress("8.8.8.8", 53), 1500)
+                return@withContext true
+            }
+        } catch (_: Exception) {}
+        try {
+            java.net.Socket().use { socket ->
+                socket.connect(java.net.InetSocketAddress("1.1.1.1", 53), 1500)
+                return@withContext true
+            }
+        } catch (_: Exception) {}
+
+        // Fallback: if Android connectivity manager reports active network is online
+        if (context != null && isOnline(context)) {
+            return@withContext true
+        }
+        false
+    }
 }
 
 @Composable

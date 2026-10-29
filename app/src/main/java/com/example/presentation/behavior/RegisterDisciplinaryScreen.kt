@@ -1,8 +1,8 @@
 package com.example.presentation.behavior
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,10 +16,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
@@ -30,11 +28,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -53,11 +47,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.core.utils.DateTimeUtils
 import com.example.domain.model.SeverityLevel
 import com.example.domain.model.UserRole
-import com.example.domain.model.toPersianDigits
 import com.example.presentation.viewmodel.AuthViewModel
 import com.example.presentation.viewmodel.MainViewModel
 import com.example.presentation.viewmodel.OperationState
@@ -66,10 +61,15 @@ import com.example.ui.theme.IncidentRedContainer
 import com.example.ui.theme.OnIncidentRedContainer
 import com.example.ui.theme.VazirmatnFontFamily
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.material.icons.filled.Person
+import com.example.presentation.components.VoiceDictationTextField
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RegisterDisciplinaryScreen(
     initialStudentId: String? = null,
+    isLockedFromScan: Boolean = false,
     mainViewModel: MainViewModel,
     authViewModel: AuthViewModel,
     onBackClick: () -> Unit
@@ -81,29 +81,15 @@ fun RegisterDisciplinaryScreen(
     val operationState by mainViewModel.operationState.collectAsState()
 
     var selectedStudentId by remember {
-        mutableStateOf(initialStudentId ?: mainViewModel.discStudentId.value.ifBlank { effectiveStudents.firstOrNull()?.id ?: "" })
+        mutableStateOf(initialStudentId ?: mainViewModel.discStudentId.value)
     }
-    var isStudentDropdownExpanded by remember { mutableStateOf(false) }
 
-    val categories = listOf(
-        "تأخیر",
-        "غیبت",
-        "بی‌نظمی",
-        "عدم رعایت قوانین مدرسه",
-        "رفتار نامناسب",
-        "درگیری",
-        "آسیب به اموال",
-        "استفاده غیرمجاز از تلفن همراه",
-        "سایر"
-    )
-
-    var selectedCategory by remember { mutableStateOf(categories.first()) }
-    var selectedSeverity by remember { mutableStateOf(SeverityLevel.MEDIUM) }
-    var title by remember { mutableStateOf("") }
-    var description by remember { mutableStateOf("") }
-    var location by remember { mutableStateOf("کلاس درس") }
+    var discText by remember { mutableStateOf("") }
+    var negativeCountText by remember { mutableStateOf("1") }
     var notifyParent by remember { mutableStateOf(true) }
     var showConfirmDialog by remember { mutableStateOf(false) }
+    var attachedImageBase64 by remember { mutableStateOf<String?>(null) }
+    var showStudentPicker by remember { mutableStateOf(false) }
 
     val currentStudent = effectiveStudents.firstOrNull { it.id == selectedStudentId }
 
@@ -135,9 +121,11 @@ fun RegisterDisciplinaryScreen(
                 }
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "ثبت مورد انضباطی",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
+                    text = "ثبت مورد انضباطی دانش‌آموز",
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontFamily = VazirmatnFontFamily,
+                        fontWeight = FontWeight.Bold
+                    )
                 )
             }
         }
@@ -154,24 +142,15 @@ fun RegisterDisciplinaryScreen(
             ) {
                 Column(modifier = Modifier.padding(18.dp)) {
 
-                    // Student Selector
-                    Text(
-                        text = "انتخاب دانش‌آموز:",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    var showStudentPicker by remember { mutableStateOf(false) }
-
+                    // Student selection field without any lock icon
                     OutlinedTextField(
-                        value = currentStudent?.let { "${it.fullName} (${it.grade} - ${it.className})" } ?: "برای جستجو و انتخاب دانش‌آموز کلیک کنید...",
+                        value = currentStudent?.let { "${it.fullName} (${it.className})" } ?: "برای جستجو و انتخاب دانش‌آموز کلیک کنید...",
                         onValueChange = {},
                         readOnly = true,
                         leadingIcon = {
                             Icon(
-                                Icons.Default.Search,
-                                contentDescription = "جستجو",
+                                Icons.Default.Person,
+                                contentDescription = "دانش‌آموز",
                                 tint = MaterialTheme.colorScheme.primary
                             )
                         },
@@ -179,7 +158,7 @@ fun RegisterDisciplinaryScreen(
                             IconButton(onClick = { showStudentPicker = true }) {
                                 Icon(
                                     Icons.Default.ArrowDropDown,
-                                    contentDescription = "انتخاب دانش‌آموز"
+                                    contentDescription = "تغییر دانش‌آموز"
                                 )
                             }
                         },
@@ -206,156 +185,111 @@ fun RegisterDisciplinaryScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // Severity Selector
-                    Text(
-                        text = "سطح شدت مورد انضباطی:",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        SeverityLevel.entries.forEach { sev ->
-                            FilterChip(
-                                selected = selectedSeverity == sev,
-                                onClick = {
-                                    selectedSeverity = sev
-                                    mainViewModel.discSeverity.value = sev
-                                },
-                                label = { Text(sev.farsiTitle) },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Category Selector
-                    Text(
-                        text = "عنوان تخلف / دسته‌بندی:",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(categories) { cat ->
-                            FilterChip(
-                                selected = selectedCategory == cat,
-                                onClick = {
-                                    selectedCategory = cat
-                                    mainViewModel.discCategory.value = cat
-                                },
-                                label = { Text(cat) }
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Title
-                    OutlinedTextField(
-                        value = title,
+                    // Disciplinary Description Field with Voice Dictation
+                    VoiceDictationTextField(
+                        value = discText,
                         onValueChange = {
-                            title = it
+                            discText = it
                             mainViewModel.discTitle.value = it
+                            mainViewModel.discDescription.value = it
                         },
-                        textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = VazirmatnFontFamily),
-                        label = {
-                            Text(
-                                text = "شرح مختصر / عنوان مورد انضباطی *",
-                                style = MaterialTheme.typography.bodyMedium.copy(
-                                    fontFamily = VazirmatnFontFamily,
-                                    fontWeight = FontWeight.Light
-                                )
-                            )
-                        },
-                        placeholder = {
-                            Text(
-                                text = "عنوان مورد انضباطی",
-                                style = MaterialTheme.typography.bodyMedium.copy(
-                                    fontFamily = VazirmatnFontFamily,
-                                    fontWeight = FontWeight.Light
-                                )
-                            )
-                        },
-                        singleLine = true,
+                        label = if (attachedImageBase64 != null) "شرح مورد انضباطی (اختیاری در صورت داشتن تصویر)" else "شرح مورد انضباطی",
+                        placeholder = "مثال: تأخیر در ورود به کلاس، عدم انجام تکالیف...",
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("disc_title_input"),
-                        shape = RoundedCornerShape(12.dp)
+                        minLines = 3,
+                        testTagPrefix = "disc_voice"
                     )
 
-                    Spacer(modifier = Modifier.height(14.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
 
-                    // Location
+                    // Negative Count Field (Numeric Only, Label: تعداد منفی *)
                     OutlinedTextField(
-                        value = location,
-                        onValueChange = {
-                            location = it
-                            mainViewModel.discLocation.value = it
+                        value = negativeCountText,
+                        onValueChange = { input ->
+                            val filtered = input.filter { c -> c.isDigit() }
+                            negativeCountText = filtered
+                            val count = filtered.toIntOrNull() ?: 1
+                            mainViewModel.discPoints.value = count
                         },
-                        textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = VazirmatnFontFamily),
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(
+                            fontFamily = VazirmatnFontFamily,
+                            fontWeight = FontWeight.Bold
+                        ),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         label = {
                             Text(
-                                text = "محل وقوع",
+                                text = "تعداد منفی *",
                                 style = MaterialTheme.typography.bodyMedium.copy(
                                     fontFamily = VazirmatnFontFamily,
-                                    fontWeight = FontWeight.Light
+                                    fontWeight = FontWeight.Bold
                                 )
                             )
                         },
                         placeholder = {
-                            Text(
-                                text = "کلاس، راهرو، حیاط و ...",
-                                style = MaterialTheme.typography.bodyMedium.copy(
-                                    fontFamily = VazirmatnFontFamily,
-                                    fontWeight = FontWeight.Light
-                                )
-                            )
+                            Text("1", fontFamily = VazirmatnFontFamily)
                         },
                         singleLine = true,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .testTag("disc_location_input"),
+                            .testTag("disc_count_input"),
                         shape = RoundedCornerShape(12.dp)
                     )
 
-                    Spacer(modifier = Modifier.height(14.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
 
-                    // Description
-                    OutlinedTextField(
-                        value = description,
-                        onValueChange = {
-                            description = it
-                            mainViewModel.discDescription.value = it
-                        },
-                        textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = VazirmatnFontFamily),
-                        label = {
-                            Text(
-                                text = "توضیحات تکمیلی",
-                                style = MaterialTheme.typography.bodyMedium.copy(
-                                    fontFamily = VazirmatnFontFamily,
-                                    fontWeight = FontWeight.Light
-                                )
-                            )
-                        },
-                        placeholder = {
-                            Text(
-                                text = "جزئیات ماجرا و تذکرات داده شده...",
-                                style = MaterialTheme.typography.bodyMedium.copy(
-                                    fontFamily = VazirmatnFontFamily,
-                                    fontWeight = FontWeight.Light
-                                )
-                            )
-                        },
-                        minLines = 3,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("disc_desc_input"),
-                        shape = RoundedCornerShape(12.dp)
-                    )
+                    // Photo Attachment UI
+                    val context = androidx.compose.ui.platform.LocalContext.current
+                    val imagePickerLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+                        contract = androidx.activity.result.contract.ActivityResultContracts.GetContent()
+                    ) { uri: android.net.Uri? ->
+                        uri?.let {
+                            try {
+                                val inputStream = context.contentResolver.openInputStream(it)
+                                val bitmap = android.graphics.BitmapFactory.decodeStream(inputStream)
+                                if (bitmap != null) {
+                                    val stream = java.io.ByteArrayOutputStream()
+                                    bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 80, stream)
+                                    val bytes = stream.toByteArray()
+                                    attachedImageBase64 = "data:image/jpeg;base64," + android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+                                }
+                            } catch (_: Exception) {}
+                        }
+                    }
+
+                    if (attachedImageBase64 != null) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, IncidentRed)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Report, contentDescription = null, tint = IncidentRed)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("تصویر پیوست شد ✓ (شرح متنی اختیاری است)", fontFamily = VazirmatnFontFamily, fontSize = 12.sp, color = IncidentRed, fontWeight = FontWeight.Bold)
+                                }
+                                IconButton(onClick = { attachedImageBase64 = null }) {
+                                    Icon(Icons.Default.Report, contentDescription = "حذف عکس", tint = IncidentRedContainer)
+                                }
+                            }
+                        }
+                    } else {
+                        OutlinedButton(
+                            onClick = { imagePickerLauncher.launch("image/*") },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Default.Report, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("افزودن تصویر پیوست (اختیاری)", fontFamily = VazirmatnFontFamily)
+                        }
+                    }
 
                     Spacer(modifier = Modifier.height(16.dp))
 
@@ -367,14 +301,16 @@ fun RegisterDisciplinaryScreen(
                     ) {
                         Text(
                             text = "تاریخ: $currentDate - $currentTime",
-                            style = MaterialTheme.typography.bodySmall,
+                            style = MaterialTheme.typography.bodySmall.copy(fontFamily = VazirmatnFontFamily),
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
                             text = "ثبت‌کننده: ${currentUser?.name ?: "کاربر سیستم"}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.SemiBold
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontFamily = VazirmatnFontFamily,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
                         )
                     }
 
@@ -389,12 +325,14 @@ fun RegisterDisciplinaryScreen(
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = "اطلاع‌رسانی به اولیاء",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.SemiBold
+                                style = MaterialTheme.typography.titleSmall.copy(
+                                    fontFamily = VazirmatnFontFamily,
+                                    fontWeight = FontWeight.SemiBold
+                                )
                             )
                             Text(
-                                text = "ثبت در سامانه اولیاء دانش‌آموز",
-                                style = MaterialTheme.typography.bodySmall,
+                                text = "ارسال پیام به اولیا (در صورت ورود)",
+                                style = MaterialTheme.typography.bodySmall.copy(fontFamily = VazirmatnFontFamily),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
@@ -418,7 +356,7 @@ fun RegisterDisciplinaryScreen(
                             Text(
                                 text = (operationState as OperationState.Error).message,
                                 color = OnIncidentRedContainer,
-                                style = MaterialTheme.typography.bodySmall,
+                                style = MaterialTheme.typography.bodySmall.copy(fontFamily = VazirmatnFontFamily),
                                 modifier = Modifier.padding(10.dp)
                             )
                         }
@@ -433,8 +371,13 @@ fun RegisterDisciplinaryScreen(
                     ) {
                         Button(
                             onClick = {
-                                if (title.trim().length < 3) {
-                                    mainViewModel.operationState.value = OperationState.Error("عنوان مورد انضباطی باید حداقل ۳ حرف باشد.")
+                                if (selectedStudentId.isBlank() || currentStudent == null) {
+                                    mainViewModel.operationState.value = OperationState.Error("لطفاً ابتدا یک دانش‌آموز را جهت ثبت مورد انضباطی انتخاب کنید.")
+                                    return@Button
+                                }
+                                val text = discText.trim()
+                                if (text.isBlank() && attachedImageBase64 == null) {
+                                    mainViewModel.operationState.value = OperationState.Error("لطفاً شرح مورد انضباطی را وارد کرده یا یک تصویر پیوست نمایید.")
                                 } else {
                                     showConfirmDialog = true
                                 }
@@ -448,7 +391,7 @@ fun RegisterDisciplinaryScreen(
                         ) {
                             Icon(Icons.Default.Report, contentDescription = null)
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("ثبت", fontWeight = FontWeight.Bold)
+                            Text("ثبت مورد انضباطی", fontWeight = FontWeight.Bold, fontFamily = VazirmatnFontFamily)
                         }
 
                         OutlinedButton(
@@ -458,7 +401,7 @@ fun RegisterDisciplinaryScreen(
                                 .height(50.dp),
                             shape = RoundedCornerShape(12.dp)
                         ) {
-                            Text("لغو")
+                            Text("لغو", fontFamily = VazirmatnFontFamily)
                         }
                     }
                 }
@@ -471,46 +414,51 @@ fun RegisterDisciplinaryScreen(
     }
 
     if (showConfirmDialog) {
+        val text = discText.trim()
+        val finalText = if (text.isBlank()) "تصویر پیوست شده مورد انضباطی" else text
+
         AlertDialog(
             onDismissRequest = { showConfirmDialog = false },
             title = {
                 Text(
                     text = "تأیید ثبت مورد انضباطی",
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleMedium.copy(fontFamily = VazirmatnFontFamily),
                     fontWeight = FontWeight.Bold
                 )
             },
             text = {
                 Text(
-                    text = "آیا از ثبت این مورد انضباطی برای دانش‌آموز «${currentStudent?.fullName}» اطمینان دارید؟"
+                    text = "آیا از ثبت این مورد انضباطی برای دانش‌آموز «${currentStudent?.fullName}» اطمینان دارید؟",
+                    fontFamily = VazirmatnFontFamily
                 )
             },
             confirmButton = {
                 Button(
                     onClick = {
+                        val count = negativeCountText.toIntOrNull() ?: 1
                         showConfirmDialog = false
-                        mainViewModel.discStudentId.value = selectedStudentId
-                        mainViewModel.discCategory.value = selectedCategory
-                        mainViewModel.discTitle.value = title
-                        mainViewModel.discDescription.value = description
-                        mainViewModel.discLocation.value = location
-                        mainViewModel.discSeverity.value = selectedSeverity
-                        mainViewModel.discNotifyParent.value = notifyParent
-
-                        mainViewModel.submitDisciplinaryRecord(
-                            creatorName = currentUser?.name ?: "معاون",
-                            creatorRole = currentUser?.role ?: UserRole.VICE_PRINCIPAL,
-                            onSuccess = { onBackClick() }
+                        mainViewModel.registerBehaviorRecord(
+                            studentId = selectedStudentId,
+                            type = com.example.domain.model.RecordType.DISCIPLINARY,
+                            category = "مورد انضباطی",
+                            title = "مورد انضباطی",
+                            description = finalText,
+                            points = count,
+                            createdBy = currentUser?.name ?: "معاون",
+                            createdByRole = currentUser?.role ?: UserRole.VICE_PRINCIPAL,
+                            parentNotified = notifyParent,
+                            imageUrl = attachedImageBase64
                         )
+                        onBackClick()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = IncidentRed)
                 ) {
-                    Text("بله، ثبت نهایی")
+                    Text("بله، ثبت نهایی", fontFamily = VazirmatnFontFamily)
                 }
             },
             dismissButton = {
                 OutlinedButton(onClick = { showConfirmDialog = false }) {
-                    Text("بازبینی")
+                    Text("بازبینی", fontFamily = VazirmatnFontFamily)
                 }
             },
             shape = RoundedCornerShape(18.dp)

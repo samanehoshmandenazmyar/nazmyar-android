@@ -23,20 +23,26 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Badge
+import androidx.compose.material.icons.filled.BrightnessAuto
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ColorLens
+import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Email
-import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
+import com.example.core.theme.ThemeManager
+import com.example.core.theme.ThemeMode
+import com.example.ui.theme.VazirmatnFontFamily
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
@@ -44,6 +50,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -66,6 +74,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.demo.DemoData
@@ -288,6 +297,24 @@ fun ProfileScreen(
                         value = currentUser?.gender ?: "نامشخص"
                     )
 
+                    if (currentUser?.teachingSubjects?.isNotEmpty() == true) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        ProfileInfoRow(
+                            icon = Icons.Default.School,
+                            label = "دروس تدریسی",
+                            value = currentUser?.teachingSubjects?.joinToString("، ") ?: ""
+                        )
+                    }
+
+                    if (currentUser?.assignedClasses?.isNotEmpty() == true) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        ProfileInfoRow(
+                            icon = Icons.Default.Badge,
+                            label = "کلاس‌های تحت تدریس",
+                            value = currentUser?.assignedClasses?.joinToString("، ") ?: ""
+                        )
+                    }
+
                     Spacer(modifier = Modifier.height(10.dp))
 
                     ProfileInfoRow(
@@ -295,6 +322,171 @@ fun ProfileScreen(
                         label = "نسخه برنامه",
                         value = com.example.BuildConfig.VERSION_NAME.toPersianDigits()
                     )
+                }
+            }
+        }
+
+        // Theme Settings Card
+        item {
+            val currentThemeMode by ThemeManager.themeMode.collectAsState()
+
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 6.dp)
+                    .testTag("theme_settings_card"),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Palette,
+                            contentDescription = null,
+                            tint = SchoolBluePrimary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            text = "پوسته و ظاهر برنامه",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "می‌توانید ظاهر برنامه را روی حالت روشن، تاریک یا هماهنگ با تم پیش‌فرض گوشی خود قرار دهید:",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // System Auto
+                        val isSystemSelected = currentThemeMode == ThemeMode.SYSTEM
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (isSystemSelected) SchoolBluePrimary.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            border = BorderStroke(
+                                1.5.dp,
+                                if (isSystemSelected) SchoolBluePrimary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                            ),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable {
+                                    ThemeManager.setThemeMode(ThemeMode.SYSTEM)
+                                }
+                                .testTag("theme_mode_system")
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(vertical = 10.dp, horizontal = 4.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.BrightnessAuto,
+                                    contentDescription = null,
+                                    tint = if (isSystemSelected) SchoolBluePrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Text(
+                                    text = "خودکار (گوشی)",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontFamily = VazirmatnFontFamily,
+                                        fontWeight = if (isSystemSelected) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (isSystemSelected) SchoolBluePrimary else MaterialTheme.colorScheme.onSurface
+                                    ),
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                        }
+
+                        // Light
+                        val isLightSelected = currentThemeMode == ThemeMode.LIGHT
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (isLightSelected) SchoolBluePrimary.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            border = BorderStroke(
+                                1.5.dp,
+                                if (isLightSelected) SchoolBluePrimary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                            ),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable {
+                                    ThemeManager.setThemeMode(ThemeMode.LIGHT)
+                                }
+                                .testTag("theme_mode_light")
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(vertical = 10.dp, horizontal = 4.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.LightMode,
+                                    contentDescription = null,
+                                    tint = if (isLightSelected) SchoolBluePrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Text(
+                                    text = "تم روشن",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontFamily = VazirmatnFontFamily,
+                                        fontWeight = if (isLightSelected) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (isLightSelected) SchoolBluePrimary else MaterialTheme.colorScheme.onSurface
+                                    ),
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                        }
+
+                        // Dark
+                        val isDarkSelected = currentThemeMode == ThemeMode.DARK
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (isDarkSelected) SchoolBluePrimary.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            border = BorderStroke(
+                                1.5.dp,
+                                if (isDarkSelected) SchoolBluePrimary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                            ),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable {
+                                    ThemeManager.setThemeMode(ThemeMode.DARK)
+                                }
+                                .testTag("theme_mode_dark")
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(vertical = 10.dp, horizontal = 4.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.DarkMode,
+                                    contentDescription = null,
+                                    tint = if (isDarkSelected) SchoolBluePrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Text(
+                                    text = "تم تاریک",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontFamily = VazirmatnFontFamily,
+                                        fontWeight = if (isDarkSelected) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (isDarkSelected) SchoolBluePrimary else MaterialTheme.colorScheme.onSurface
+                                    ),
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -315,7 +507,7 @@ fun ProfileScreen(
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Default.ExitToApp,
+                        imageVector = Icons.AutoMirrored.Filled.ExitToApp,
                         contentDescription = "خروج",
                         tint = IncidentRed
                     )
@@ -399,6 +591,28 @@ fun EditProfileDialog(
     // Ranks and RGB
     var primaryRankInput by remember { mutableStateOf(user.rankTitle) }
     var primaryColorHex by remember { mutableStateOf(user.rankColorHex) }
+
+    // Teaching subjects & Assigned classes
+    val allowedSubjectsList = remember {
+        listOf(
+            "ریاضی",
+            "علوم تجربی",
+            "مطالعات اجتماعی",
+            "قرآن",
+            "فرهنگ و هنر",
+            "عربی، زبان قرآن",
+            "فارسی",
+            "پیام‌های آسمان",
+            "ورزش",
+            "زبان انگلیسی"
+        )
+    }
+    val classBranchOptions = remember {
+        listOf("کلاس 7/1", "کلاس 7/2", "کلاس 8/1", "کلاس 8/2", "کلاس 9/1", "کلاس 9/2")
+    }
+
+    val selectedTeachingSubjects = remember { mutableStateListOf<String>().apply { addAll(user.teachingSubjects) } }
+    val selectedAssignedClasses = remember { mutableStateListOf<String>().apply { addAll(user.assignedClasses) } }
 
     // Extra ranks and colors
     val extraRanks = remember { mutableStateListOf<String>().apply { addAll(user.extraRanks) } }
@@ -760,6 +974,88 @@ fun EditProfileDialog(
                         }
                     }
                 }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // TEACHING SUBJECTS & ASSIGNED CLASSES SELECTION
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                    border = BorderStroke(1.dp, SchoolBluePrimary.copy(alpha = 0.3f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.School,
+                                contentDescription = null,
+                                tint = SchoolBluePrimary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "مشخصات تدریس (ویژه معلمان و کادر)",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = VazirmatnFontFamily
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Text(
+                            text = "دروس تدریسی (قابل انتخاب از ۱۰ درس رسمی):",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = VazirmatnFontFamily
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            allowedSubjectsList.forEach { subj ->
+                                val isSelected = selectedTeachingSubjects.contains(subj)
+                                FilterChip(
+                                    selected = isSelected,
+                                    onClick = {
+                                        if (isSelected) selectedTeachingSubjects.remove(subj)
+                                        else selectedTeachingSubjects.add(subj)
+                                    },
+                                    label = { Text(subj, fontSize = 11.sp, fontFamily = VazirmatnFontFamily) }
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Text(
+                            text = "شعبه‌های کلاس‌های تحت تدریس:",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = VazirmatnFontFamily
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            classBranchOptions.forEach { cls ->
+                                val isSelected = selectedAssignedClasses.contains(cls)
+                                FilterChip(
+                                    selected = isSelected,
+                                    onClick = {
+                                        if (isSelected) selectedAssignedClasses.remove(cls)
+                                        else selectedAssignedClasses.add(cls)
+                                    },
+                                    label = { Text(cls, fontSize = 11.sp, fontFamily = VazirmatnFontFamily) }
+                                )
+                            }
+                        }
+                    }
+                }
             }
         },
         confirmButton = {
@@ -796,7 +1092,9 @@ fun EditProfileDialog(
                         rankColorHex = finalColor,
                         rankBadgeColorHex = colorIntLong,
                         extraRanks = extraRanks.toList(),
-                        extraRankColors = extraColors.toList()
+                        extraRankColors = extraColors.toList(),
+                        teachingSubjects = selectedTeachingSubjects.toList(),
+                        assignedClasses = selectedAssignedClasses.toList()
                     )
 
                     onSave(updatedUser)

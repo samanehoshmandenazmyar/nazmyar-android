@@ -115,8 +115,8 @@ fun PublishAppUpdateScreen(
     val currentUpdateInfo by authViewModel.appUpdateInfo.collectAsState()
 
     // Form states
-    var versionName by remember { mutableStateOf("1.0.7") }
-    var versionCode by remember { mutableIntStateOf(8) }
+    var versionName by remember { mutableStateOf("1.1.2") }
+    var versionCode by remember { mutableIntStateOf(11) }
     var minSupportedVersionCode by remember { mutableIntStateOf(1) }
     var sha256 by remember { mutableStateOf("") }
     var releaseNotes by remember {
@@ -651,7 +651,7 @@ fun PublishAppUpdateScreen(
                             },
                             placeholder = {
                                 Text(
-                                    text = "مثال: 1.0.7",
+                                    text = "مثال: 1.1.2",
                                     style = MaterialTheme.typography.bodyMedium.copy(
                                         fontFamily = VazirmatnFontFamily,
                                         fontWeight = FontWeight.Light

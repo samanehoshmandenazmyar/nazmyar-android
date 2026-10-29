@@ -53,11 +53,16 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import android.util.Base64
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import coil.compose.AsyncImage
 import coil.compose.SubcomposeAsyncImage
+import coil.request.CachePolicy
+import coil.request.ImageRequest
 import com.example.R
 import com.example.core.network.NetworkMonitor
 import com.example.core.network.rememberIsOnline
@@ -222,6 +227,12 @@ fun BannerItemCard(
     }
 }
 
+private enum class BannerLoadStatus {
+    LOADING,
+    SUCCESS,
+    ERROR
+}
+
 @Composable
 fun BannerImage(
     imageUrl: String,
@@ -229,186 +240,140 @@ fun BannerImage(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val isOnlineState by rememberIsOnline()
-    var refreshTrigger by remember { mutableIntStateOf(0) }
-    val isConnected = remember(isOnlineState, refreshTrigger) {
-        NetworkMonitor.isOnline(context)
+    val isOnline by rememberIsOnline()
+    var retryCount by remember { mutableIntStateOf(0) }
+
+    // When internet connection is established / restored, automatically retry loading
+    LaunchedEffect(isOnline) {
+        if (isOnline) {
+            retryCount++
+        }
     }
 
-    if (!isConnected) {
-        // Dependent on internet: If disconnected, show clean offline indicator
-        Box(
-            modifier = modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f)),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                Surface(
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.surface,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.CloudOff,
-                        contentDescription = "بدون اینترنت",
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier
-                            .padding(10.dp)
-                            .size(26.dp)
-                    )
-                }
+    val resId = when (imageUrl) {
+        "res:img_home_banner_olympiad" -> R.drawable.img_home_banner_olympiad
+        "res:img_home_banner_sports" -> R.drawable.img_home_banner_sports
+        else -> null
+    }
 
-                Spacer(modifier = Modifier.height(8.dp))
+    if (!isOnline) {
+        // When disconnected from internet, show gray "تصویر لود نشد"
+        BannerOfflineBox(
+            modifier = modifier,
+            onRetry = { retryCount++ }
+        )
+    } else if (resId != null) {
+        // Preset banner: show spinning circle indicator based on server reachability
+        var loadStatus by remember(imageUrl, retryCount) {
+            mutableStateOf(BannerLoadStatus.LOADING)
+        }
 
-                Text(
-                    text = "نیاز به اتصال اینترنت برای بارگذاری بنر",
-                    style = MaterialTheme.typography.titleSmall.copy(
-                        fontFamily = VazirmatnFontFamily,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    ),
-                    textAlign = TextAlign.Center
+        LaunchedEffect(imageUrl, retryCount, isOnline) {
+            if (!isOnline) {
+                loadStatus = BannerLoadStatus.ERROR
+                return@LaunchedEffect
+            }
+            loadStatus = BannerLoadStatus.LOADING
+            val isReachable = NetworkMonitor.checkRealInternetAccess(context)
+            if (isReachable || NetworkMonitor.isOnline(context)) {
+                delay(300)
+                loadStatus = BannerLoadStatus.SUCCESS
+            } else {
+                loadStatus = BannerLoadStatus.ERROR
+            }
+        }
+
+        when (loadStatus) {
+            BannerLoadStatus.LOADING -> BannerLoadingBox(modifier = modifier)
+            BannerLoadStatus.ERROR -> BannerOfflineBox(modifier = modifier, onRetry = { retryCount++ })
+            BannerLoadStatus.SUCCESS -> {
+                Image(
+                    painter = painterResource(id = resId),
+                    contentDescription = contentDescription,
+                    modifier = modifier,
+                    contentScale = ContentScale.Crop
                 )
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                Text(
-                    text = "لود شدن تصویر بنر وابسته به اینترنت است. لطفاً اتصال شبکه را بررسی کنید.",
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        fontFamily = VazirmatnFontFamily,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    ),
-                    textAlign = TextAlign.Center
-                )
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Button(
-                    onClick = { refreshTrigger++ },
-                    shape = RoundedCornerShape(10.dp),
-                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Refresh,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "بررسی مجدد اتصال",
-                        style = MaterialTheme.typography.labelMedium.copy(
-                            fontFamily = VazirmatnFontFamily,
-                            fontWeight = FontWeight.Bold
-                        )
-                    )
-                }
             }
         }
     } else {
-        // Connected to internet: Load banner image with smooth loading indicator
-        val resId = when (imageUrl) {
-            "res:img_home_banner_olympiad" -> R.drawable.img_home_banner_olympiad
-            "res:img_home_banner_sports" -> R.drawable.img_home_banner_sports
-            else -> null
+        // Cloud, Web or Uploaded Base64 banner:
+        // Loads from server based on user's internet speed with loading spinner
+        val modelData: Any = remember(imageUrl) {
+            if (imageUrl.startsWith("data:image/", ignoreCase = true)) {
+                try {
+                    val base64 = imageUrl.substringAfter("base64,")
+                    Base64.decode(base64, Base64.DEFAULT)
+                } catch (_: Exception) {
+                    imageUrl
+                }
+            } else {
+                imageUrl
+            }
         }
 
-        if (resId != null) {
-            Image(
-                painter = painterResource(id = resId),
-                contentDescription = contentDescription,
-                modifier = modifier,
-                contentScale = ContentScale.Crop
-            )
-        } else {
-            SubcomposeAsyncImage(
-                model = imageUrl,
-                contentDescription = contentDescription,
-                modifier = modifier,
-                contentScale = ContentScale.Crop,
-                loading = {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            CircularProgressIndicator(
-                                strokeWidth = 2.5.dp,
-                                modifier = Modifier.size(28.dp),
-                                color = SchoolBluePrimary
-                            )
-                            Text(
-                                text = "در حال دریافت بنر از اینترنت...",
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontFamily = VazirmatnFontFamily,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            )
-                        }
-                    }
-                },
-                error = {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(6.dp),
-                            modifier = Modifier.padding(12.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.CloudOff,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.size(24.dp)
-                            )
-                            Text(
-                                text = "خطا در دریافت تصویر از اینترنت",
-                                style = MaterialTheme.typography.bodySmall.copy(
-                                    fontFamily = VazirmatnFontFamily,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.error
-                                ),
-                                textAlign = TextAlign.Center
-                            )
-                            Text(
-                                text = "برای بارگذاری مجدد، روی دکمه تلاش مجدد ضربه بزنید.",
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontFamily = VazirmatnFontFamily,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                ),
-                                textAlign = TextAlign.Center
-                            )
-                            Button(
-                                onClick = { refreshTrigger++ },
-                                shape = RoundedCornerShape(8.dp),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Refresh,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("تلاش مجدد", fontSize = 11.sp)
-                            }
-                        }
-                    }
-                }
+        SubcomposeAsyncImage(
+            model = ImageRequest.Builder(context)
+                .data(modelData)
+                .crossfade(300)
+                .setParameter("retry", retryCount, null)
+                .build(),
+            contentDescription = contentDescription,
+            modifier = modifier,
+            contentScale = ContentScale.Crop,
+            loading = {
+                BannerLoadingBox(modifier = Modifier.fillMaxSize())
+            },
+            error = {
+                BannerOfflineBox(
+                    modifier = Modifier.fillMaxSize(),
+                    onRetry = { retryCount++ }
+                )
+            }
+        )
+    }
+}
+
+@Composable
+private fun BannerLoadingBox(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+        contentAlignment = Alignment.Center
+    ) {
+        CircularProgressIndicator(
+            strokeWidth = 3.dp,
+            modifier = Modifier.size(32.dp),
+            color = SchoolBluePrimary
+        )
+    }
+}
+
+@Composable
+private fun BannerOfflineBox(
+    modifier: Modifier = Modifier,
+    onRetry: () -> Unit
+) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
+            .clickable(onClick = onRetry),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier.padding(12.dp)
+        ) {
+            Text(
+                text = "تصویر لود نشد",
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontFamily = VazirmatnFontFamily,
+                    fontWeight = FontWeight.Medium,
+                    color = Color.Gray
+                ),
+                textAlign = TextAlign.Center
             )
         }
     }

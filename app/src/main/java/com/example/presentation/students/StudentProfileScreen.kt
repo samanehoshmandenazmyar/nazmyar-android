@@ -58,6 +58,7 @@ import com.example.domain.model.RecordType
 import com.example.domain.model.Student
 import com.example.domain.model.UserRole
 import com.example.domain.model.toPersianDigits
+import com.example.domain.model.isValidPhoneNumber
 import com.example.presentation.components.BehaviorRecordCard
 import com.example.presentation.components.StatCard
 import com.example.presentation.viewmodel.AuthViewModel
@@ -216,24 +217,34 @@ fun StudentProfileScreen(
                             )
                         }
 
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = if (student.score >= 90) PositiveGreenContainer else WarningAmberContainer
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            Column(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = PositiveGreenContainer
                             ) {
                                 Text(
-                                    text = "نمره انضباط",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = if (student.score >= 90) OnPositiveGreenContainer else OnWarningAmberContainer
-                                )
-                                Text(
-                                    text = student.score.toPersianDigits(),
-                                    style = MaterialTheme.typography.titleLarge,
+                                    text = "${student.positiveCount.toPersianDigits()}+",
+                                    style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (student.score >= 90) OnPositiveGreenContainer else OnWarningAmberContainer
+                                    color = OnPositiveGreenContainer,
+                                    fontFamily = VazirmatnFontFamily,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
+                                )
+                            }
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = IncidentRedContainer
+                            ) {
+                                Text(
+                                    text = "${student.disciplinaryCount.toPersianDigits()}-",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = OnIncidentRedContainer,
+                                    fontFamily = VazirmatnFontFamily,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
                                 )
                             }
                         }
@@ -252,18 +263,26 @@ fun StudentProfileScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.Phone,
-                                contentDescription = "تلفن",
-                                modifier = Modifier.size(14.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
+                        if (student.parentPhone.isValidPhoneNumber()) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Phone,
+                                    contentDescription = "تلفن",
+                                    modifier = Modifier.size(14.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = student.parentPhone.toPersianDigits(),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        } else {
                             Text(
-                                text = student.parentPhone.toPersianDigits(),
+                                text = "تلفن: ثبت‌نشده (در انتظار ورود)",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                             )
                         }
                     }
@@ -329,6 +348,15 @@ fun StudentProfileScreen(
                     }
                 }
             }
+        }
+
+        // Face Biometric Registration Card (Manager & Special People Only)
+        item {
+            com.example.presentation.face.FaceRegisterCard(
+                student = student,
+                currentUser = currentUser,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+            )
         }
 
         // Summary Stats Row

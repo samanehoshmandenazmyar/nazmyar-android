@@ -12,8 +12,12 @@ data class ClassGroup(
     val gradeName: String,
     val avatarColorHex: Long,
     val memberCount: Int,
-    val description: String
-)
+    val description: String,
+    val isOfficialChannel: Boolean = false,
+    val isPermanent: Boolean = true
+) {
+    val isOfficial: Boolean get() = isOfficialChannel
+}
 
 data class Attendee(
     val userId: String,
@@ -32,17 +36,27 @@ data class AttendanceCardData(
     val attendees: List<Attendee> = emptyList()
 )
 
+enum class MessageStatus {
+    SENDING,
+    SENT,
+    DELIVERED,
+    READ,
+    FAILED
+}
+
 data class ChatMessage(
     val id: String,
     val classGroupId: String,
     val senderId: String,
     val senderName: String,
     val senderRole: String,
+    val senderAvatarUrl: String? = null,
     val text: String,
     val timestamp: Long = System.currentTimeMillis(),
     val timeFormatted: String,
     val isAttendanceCard: Boolean = false,
-    val attendanceData: AttendanceCardData? = null
+    val attendanceData: AttendanceCardData? = null,
+    val status: MessageStatus = MessageStatus.SENT
 )
 
 object PersianDateHelper {
@@ -99,15 +113,13 @@ object PersianDateHelper {
             jy += ((gDayNo - 1) / 365)
             gDayNo = (gDayNo - 1) % 365
         }
-        val jm: Int
-        val jd: Int
-        if (gDayNo < 186) {
-            jm = 1 + (gDayNo / 31)
-            jd = 1 + (gDayNo % 31)
-        } else {
-            jm = 7 + ((gDayNo - 186) / 30)
-            jd = 1 + ((gDayNo - 186) % 30)
+        val jDaysInMonth = intArrayOf(31, 31, 31, 31, 31, 31, 30, 30, 30, 30, 30, 29)
+        var jm = 0
+        while (jm < 12 && gDayNo >= jDaysInMonth[jm]) {
+            gDayNo -= jDaysInMonth[jm]
+            jm++
         }
-        return intArrayOf(jy, jm, jd)
+        val jd = gDayNo + 1
+        return intArrayOf(jy, jm + 1, jd)
     }
 }

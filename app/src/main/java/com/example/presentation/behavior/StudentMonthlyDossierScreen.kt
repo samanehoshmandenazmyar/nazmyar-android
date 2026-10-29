@@ -1,7 +1,6 @@
 package com.example.presentation.behavior
 
 import android.content.Context
-import android.content.Intent
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -10,8 +9,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -31,29 +28,22 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.Assignment
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Phone
-import androidx.compose.material.icons.filled.Print
-import androidx.compose.material.icons.filled.RemoveCircle
 import androidx.compose.material.icons.filled.Report
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -71,14 +61,12 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -86,12 +74,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.core.utils.DateTimeUtils
 import com.example.domain.model.AcademicMonth
 import com.example.domain.model.BehaviorRecord
 import com.example.domain.model.RankPermission
 import com.example.domain.model.RecordType
-import com.example.domain.model.SeverityLevel
 import com.example.domain.model.Student
 import com.example.domain.model.User
 import com.example.domain.model.UserRole
@@ -103,9 +89,24 @@ import com.example.ui.theme.PositiveGreen
 import com.example.ui.theme.SchoolBluePrimary
 import com.example.ui.theme.VazirmatnFontFamily
 import com.example.ui.theme.WarningAmber
-import java.util.UUID
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+// Class filter matching helper function
+fun matchesClassFilter(st: Student, filter: String): Boolean {
+    if (filter == "همه" || filter.isBlank()) return true
+    val g = st.grade
+    val c = st.className
+    return when (filter) {
+        "هفتم ۱" -> (g.contains("هفتم") || g.contains("7") || g.contains("۷")) && (c.contains("1") || c.contains("۱") || c.contains("7/1") || c.contains("۷/۱"))
+        "هفتم ۲" -> (g.contains("هفتم") || g.contains("7") || g.contains("۷")) && (c.contains("2") || c.contains("۲") || c.contains("7/2") || c.contains("۷/۲"))
+        "هشتم ۱" -> (g.contains("هشتم") || g.contains("8") || g.contains("۸")) && (c.contains("1") || c.contains("۱") || c.contains("8/1") || c.contains("۸/۱"))
+        "هشتم ۲" -> (g.contains("هشتم") || g.contains("8") || g.contains("۸")) && (c.contains("2") || c.contains("۲") || c.contains("8/2") || c.contains("۸/۲"))
+        "نهم ۱" -> (g.contains("نهم") || g.contains("9") || g.contains("۹")) && (c.contains("1") || c.contains("۱") || c.contains("9/1") || c.contains("۹/۱"))
+        "نهم ۲" -> (g.contains("نهم") || g.contains("9") || g.contains("۹")) && (c.contains("2") || c.contains("۲") || c.contains("9/2") || c.contains("۹/۲"))
+        else -> g.contains(filter, ignoreCase = true) || c.contains(filter, ignoreCase = true)
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StudentMonthlyDossierScreen(
     initialStudentId: String? = null,
@@ -118,8 +119,7 @@ fun StudentMonthlyDossierScreen(
     val allStudents by mainViewModel.students.collectAsState()
     val allRecords by mainViewModel.records.collectAsState()
 
-    // 1. Strict Privacy & Authorization Check
-    // "خودشم نبینه فقط کسانی که دسترسی دارند و بهشون دادم بتونند ببینند"
+    // 1. Authorization & Privacy Check (Confidential)
     val isAuthorized = remember(currentUser) {
         val u = currentUser ?: return@remember false
         if (u.role == UserRole.STUDENT || u.role == UserRole.PARENT) {
@@ -137,7 +137,6 @@ fun StudentMonthlyDossierScreen(
     }
 
     if (!isAuthorized) {
-        // Access Denied Screen
         Scaffold(
             topBar = {
                 TopAppBar(
@@ -196,7 +195,7 @@ fun StudentMonthlyDossierScreen(
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "این پرونده حاوی گزارش‌ها و تخلفات انضباطی محرمانه است. دانش‌آموزان و اولیا به این فرم دسترسی ندارند و تنها کادر مدیریت و معاونین مدرسه می‌توانند آن را مشاهده نمایند.",
+                            text = "این پرونده حاوی گزارش‌ها و سوابق انضباطی محرمانه است. دانش‌آموزان و اولیا به این فرم دسترسی ندارند.",
                             style = MaterialTheme.typography.bodyMedium.copy(
                                 fontFamily = VazirmatnFontFamily,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -220,55 +219,41 @@ fun StudentMonthlyDossierScreen(
     }
 
     // Selected Student State
-    var selectedStudentId by remember {
-        mutableStateOf(
-            initialStudentId ?: allStudents.firstOrNull()?.id ?: ""
-        )
+    var selectedStudent by remember(initialStudentId, allStudents) {
+        val initial = if (!initialStudentId.isNullOrBlank()) {
+            allStudents.firstOrNull { it.id == initialStudentId }
+        } else null
+        mutableStateOf<Student?>(initial)
     }
 
-    val student = allStudents.firstOrNull { it.id == selectedStudentId } ?: allStudents.firstOrNull()
-    val studentRecords = remember(student, allRecords) {
-        if (student == null) emptyList()
-        else {
-            val sId = student.id
-            val sCode = student.studentCode.trim()
-            val sNormName = com.example.domain.model.normalizePersianText(student.fullName)
-            allRecords.filter { r ->
-                r.studentId == sId ||
-                (sCode.isNotBlank() && r.studentId == sCode) ||
-                (r.studentName.isNotBlank() && com.example.domain.model.normalizePersianText(r.studentName) == sNormName)
-            }
+    // List view states
+    var searchQuery by remember { mutableStateOf("") }
+    var selectedClassFilter by remember { mutableStateOf("همه") }
+
+    val classFilterChips = listOf("همه", "هفتم ۱", "هفتم ۲", "هشتم ۱", "هشتم ۲", "نهم ۱", "نهم ۲")
+
+    // Filtered Students for the list view
+    val filteredStudents = remember(allStudents, searchQuery, selectedClassFilter) {
+        allStudents.filter { st ->
+            val matchesSearch = searchQuery.isBlank() ||
+                st.fullName.contains(searchQuery, ignoreCase = true) ||
+                st.studentCode.contains(searchQuery) ||
+                st.nationalId.contains(searchQuery)
+
+            val matchesClass = matchesClassFilter(st, selectedClassFilter)
+
+            matchesSearch && matchesClass
         }
     }
 
-    // Iranian Academic Month Selection (Default to current Iranian month, e.g. بهمن)
+    // Student detail states (when student is selected)
     val currentAcademicMonth = remember { AcademicMonth.getCurrentMonth() }
     var selectedMonth by remember { mutableStateOf<AcademicMonth?>(currentAcademicMonth) }
     var isFullYearSelected by remember { mutableStateOf(false) }
 
-    // Dialog state for quick addition in this month
-    var showQuickAddDialog by remember { mutableStateOf(false) }
-    var quickAddIsPositive by remember { mutableStateOf(true) }
-
-    // Filtering records by selected month or full year
-    val filteredRecords = remember(studentRecords, selectedMonth, isFullYearSelected) {
-        if (isFullYearSelected || selectedMonth == null) {
-            studentRecords
-        } else {
-            studentRecords.filter { record ->
-                AcademicMonth.fromDate(record.date, record.createdAt) == selectedMonth
-            }
-        }
-    }
-
-    val positiveRecords = filteredRecords.filter { it.type.isPositive }
-    val negativeRecords = filteredRecords.filter { !it.type.isPositive }
-
-    // Scores calculation
-    val baseScore = 100
-    val totalDeductions = negativeRecords.sumOf { (it.points ?: it.severity?.weight ?: 1) * 2 }
-    val totalBonuses = positiveRecords.sumOf { it.points ?: 2 }
-    val monthlyScore = (baseScore - totalDeductions + (totalBonuses / 2)).coerceIn(0, 100)
+    // Delete confirmation dialog state
+    var recordToDelete by remember { mutableStateOf<BehaviorRecord?>(null) }
+    var previewImageUrl by remember { mutableStateOf<String?>(null) }
 
     Scaffold(
         topBar = {
@@ -276,14 +261,14 @@ fun StudentMonthlyDossierScreen(
                 title = {
                     Column {
                         Text(
-                            text = "فرم پرونده تربیتی و انضباطی",
+                            text = if (selectedStudent == null) "پرونده انضباطی ماهانه" else "پرونده ${selectedStudent!!.fullName}",
                             style = MaterialTheme.typography.titleMedium.copy(
                                 fontFamily = VazirmatnFontFamily,
                                 fontWeight = FontWeight.Bold
                             )
                         )
                         Text(
-                            text = "سال تحصیلی ۱۴۰۳-۱۴۰۴ (تفکیک ماهانه)",
+                            text = if (selectedStudent == null) "انتخاب دانش‌آموز جهت مشاهده و مدیریت سوابق" else "سال تحصیلی ۱۴۰۵-۱۴۰۶ (${selectedStudent!!.className})",
                             style = MaterialTheme.typography.labelSmall.copy(
                                 fontFamily = VazirmatnFontFamily,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -292,23 +277,16 @@ fun StudentMonthlyDossierScreen(
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "بازگشت")
-                    }
-                },
-                actions = {
-                    if (student != null) {
-                        IconButton(
-                            onClick = {
-                                shareOfficialDossier(context, student, selectedMonth, isFullYearSelected, filteredRecords, monthlyScore)
+                    IconButton(
+                        onClick = {
+                            if (selectedStudent != null) {
+                                selectedStudent = null
+                            } else {
+                                onBackClick()
                             }
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Share,
-                                contentDescription = "اشتراک‌گذاری گزارش رسمی",
-                                tint = SchoolBluePrimary
-                            )
                         }
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "بازگشت")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
@@ -320,971 +298,732 @@ fun StudentMonthlyDossierScreen(
             .navigationBarsPadding()
             .testTag("student_monthly_dossier_screen")
     ) { innerPadding ->
-        if (student == null) {
-            Box(modifier = Modifier.fillMaxSize().padding(innerPadding), contentAlignment = Alignment.Center) {
-                Text("هیچ دانش‌آموزی در سامانه تعریف نشده است.", fontFamily = VazirmatnFontFamily)
-            }
-            return@Scaffold
-        }
 
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .background(MaterialTheme.colorScheme.background),
-            contentPadding = PaddingValues(bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            // Student Dropdown Selector (if viewing all or switching)
-            item {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-                ) {
-                var showStudentPicker by remember { mutableStateOf(false) }
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
+        // MODE 1: STUDENTS LIST VIEW (Fahrest)
+        if (selectedStudent == null) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .background(MaterialTheme.colorScheme.background),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Search & Class Filters Card
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedTextField(
+                                value = searchQuery,
+                                onValueChange = { searchQuery = it },
+                                placeholder = {
+                                    Text(
+                                        text = "جستجوی نام یا کد دانش‌آموز...",
+                                        style = MaterialTheme.typography.bodyMedium.copy(fontFamily = VazirmatnFontFamily)
+                                    )
+                                },
+                                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                                trailingIcon = {
+                                    if (searchQuery.isNotBlank()) {
+                                        IconButton(onClick = { searchQuery = "" }) {
+                                            Icon(Icons.Default.Clear, contentDescription = null)
+                                        }
+                                    }
+                                },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp)
+                            )
+
+                            // Class Filter Chips
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                items(classFilterChips) { filter ->
+                                    FilterChip(
+                                        selected = selectedClassFilter == filter,
+                                        onClick = { selectedClassFilter = filter },
+                                        label = { Text(filter, fontFamily = VazirmatnFontFamily, fontSize = 12.sp) },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = SchoolBluePrimary,
+                                            selectedLabelColor = Color.White
+                                        )
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                item {
                     Text(
-                        text = "انتخاب پرونده دانش‌آموز:",
-                        style = MaterialTheme.typography.bodySmall.copy(
+                        text = "فهرست دانش‌آموزان (${filteredStudents.size.toPersianDigits()} نفر):",
+                        style = MaterialTheme.typography.titleSmall.copy(
                             fontFamily = VazirmatnFontFamily,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     )
-                    Surface(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(10.dp))
-                            .border(1.dp, SchoolBluePrimary.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
-                            .clickable { showStudentPicker = true }
-                            .padding(horizontal = 12.dp, vertical = 6.dp),
-                        color = SchoolBluePrimary.copy(alpha = 0.08f)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                Icons.Default.Search,
-                                contentDescription = null,
-                                tint = SchoolBluePrimary,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
+                }
+
+                if (filteredStudents.isEmpty()) {
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(32.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
                             Text(
-                                text = "${student.fullName} (${student.className})",
-                                style = MaterialTheme.typography.bodySmall.copy(
-                                    fontFamily = VazirmatnFontFamily,
-                                    fontWeight = FontWeight.Bold,
-                                    color = SchoolBluePrimary
-                                )
+                                text = "هیچ دانش‌آموزی با این مشخصات یافت نشد.",
+                                fontFamily = VazirmatnFontFamily,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
+                } else {
+                    items(filteredStudents) { st ->
+                        val stRecords = allRecords.filter { r ->
+                            r.studentId == st.id ||
+                            (st.studentCode.isNotBlank() && r.studentId == st.studentCode)
+                        }
+                        val posCount = stRecords.count { it.type.isPositive }
+                        val negCount = stRecords.count { !it.type.isPositive }
 
-                    if (showStudentPicker) {
-                        com.example.presentation.components.SearchableStudentPickerDialog(
-                            students = allStudents,
-                            selectedStudentId = selectedStudentId,
-                            title = "انتخاب و جستجوی پرونده دانش‌آموز",
-                            onSelectStudent = { s ->
-                                selectedStudentId = s.id
-                                showStudentPicker = false
-                            },
-                            onDismiss = { showStudentPicker = false }
-                        )
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { selectedStudent = st }
+                                .testTag("dossier_student_item_${st.id}"),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    // Student Avatar / Initials
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = SchoolBluePrimary.copy(alpha = 0.12f),
+                                        modifier = Modifier.size(46.dp)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Text(
+                                                text = st.fullName.take(2),
+                                                style = MaterialTheme.typography.titleSmall.copy(
+                                                    fontFamily = VazirmatnFontFamily,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = SchoolBluePrimary
+                                                )
+                                            )
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.width(12.dp))
+
+                                    Column {
+                                        Text(
+                                            text = st.fullName,
+                                            style = MaterialTheme.typography.bodyLarge.copy(
+                                                fontFamily = VazirmatnFontFamily,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Surface(
+                                                shape = RoundedCornerShape(6.dp),
+                                                color = MaterialTheme.colorScheme.surfaceVariant
+                                            ) {
+                                                Text(
+                                                    text = st.className,
+                                                    style = MaterialTheme.typography.labelSmall.copy(
+                                                        fontFamily = VazirmatnFontFamily,
+                                                        fontWeight = FontWeight.SemiBold
+                                                    ),
+                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                )
+                                            }
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = "کد: ${st.studentCode.toPersianDigits()}",
+                                                style = MaterialTheme.typography.labelSmall.copy(
+                                                    fontFamily = VazirmatnFontFamily,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            )
+                                            val stHasLoggedIn = (st.id == "user_creator_hossein" || st.studentCode == "454545") || (st.hasLoggedIn && st.isRegistered)
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Surface(
+                                                shape = RoundedCornerShape(6.dp),
+                                                color = if (stHasLoggedIn) PositiveGreen.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant,
+                                                border = BorderStroke(0.5.dp, if (stHasLoggedIn) Color(0xFF86EFAC) else MaterialTheme.colorScheme.outlineVariant)
+                                            ) {
+                                                Text(
+                                                    text = if (stHasLoggedIn) "ورود یافته به سامانه ✓" else "افزوده‌شده توسط مدرسه (در انتظار ورود)",
+                                                    style = MaterialTheme.typography.labelSmall.copy(
+                                                        fontFamily = VazirmatnFontFamily,
+                                                        color = if (stHasLoggedIn) PositiveGreen else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                        fontWeight = if (stHasLoggedIn) FontWeight.Bold else FontWeight.Normal,
+                                                        fontSize = 9.sp
+                                                    ),
+                                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Badges summary count
+                                Column(horizontalAlignment = Alignment.End) {
+                                    if (posCount > 0) {
+                                        Surface(
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = PositiveGreen.copy(alpha = 0.12f)
+                                        ) {
+                                            Text(
+                                                text = "${posCount.toPersianDigits()} رفتار مثبت",
+                                                style = MaterialTheme.typography.labelSmall.copy(
+                                                    fontFamily = VazirmatnFontFamily,
+                                                    color = PositiveGreen,
+                                                    fontWeight = FontWeight.Bold
+                                                ),
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    }
+                                    if (negCount > 0) {
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Surface(
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = IncidentRed.copy(alpha = 0.12f)
+                                        ) {
+                                            Text(
+                                                text = "${negCount.toPersianDigits()} مورد انضباطی",
+                                                style = MaterialTheme.typography.labelSmall.copy(
+                                                    fontFamily = VazirmatnFontFamily,
+                                                    color = IncidentRed,
+                                                    fontWeight = FontWeight.Bold
+                                                ),
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    }
+                                    if (posCount == 0 && negCount == 0) {
+                                        Text(
+                                            text = "بدون سابقه",
+                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                fontFamily = VazirmatnFontFamily,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
+        } else {
+            // MODE 2: DETAILED STUDENT DOSSIER VIEW
+            val st = selectedStudent!!
+
+            val studentRecords = remember(st, allRecords) {
+                val sId = st.id
+                val sCode = st.studentCode.trim()
+                allRecords.filter { r ->
+                    r.studentId == sId || (sCode.isNotBlank() && r.studentId == sCode)
+                }
             }
 
-            // Student Official Dossier Profile Card (Auto-filled data)
-            item {
-                StudentOfficialDossierHeader(student = student, totalRecords = studentRecords.size)
+            val filteredRecords = remember(studentRecords, selectedMonth, isFullYearSelected) {
+                if (isFullYearSelected || selectedMonth == null) {
+                    studentRecords
+                } else {
+                    studentRecords.filter { record ->
+                        AcademicMonth.fromDate(record.date, record.createdAt) == selectedMonth
+                    }
+                }
             }
 
-            // Iranian Academic Months Selector (مهر تا خرداد + تابستان)
-            item {
-                Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-                    Row(
+            val positiveRecords = filteredRecords.filter { it.type.isPositive }
+            val disciplinaryRecords = filteredRecords.filter { !it.type.isPositive }
+
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .background(MaterialTheme.colorScheme.background),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                // Top Header Card for Student Info
+                item {
+                    Card(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                     ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column {
+                                Text(
+                                    text = st.fullName,
+                                    style = MaterialTheme.typography.titleMedium.copy(
+                                        fontFamily = VazirmatnFontFamily,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "پایه و کلاس: ${st.grade} - ${st.className} | کد دانش‌آموزی: ${st.studentCode.toPersianDigits()}",
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        fontFamily = VazirmatnFontFamily,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                )
+                            }
+                            OutlinedButton(
+                                onClick = { selectedStudent = null },
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Text("تغییر دانش‌آموز", fontFamily = VazirmatnFontFamily, fontSize = 11.sp)
+                            }
+                        }
+                    }
+                }
+
+                // Month Filter Selector Chips
+                item {
+                    Column(modifier = Modifier.fillMaxWidth()) {
                         Text(
-                            text = "ماه‌های سال تحصیلی ایران:",
+                            text = "انتخاب بازه زمانی:",
                             style = MaterialTheme.typography.titleSmall.copy(
                                 fontFamily = VazirmatnFontFamily,
                                 fontWeight = FontWeight.Bold
                             )
                         )
-                        Text(
-                            text = if (isFullYearSelected) "نمایش کل سال تحصیلی" else "ماه انتخابی: ${selectedMonth?.persianName ?: ""}",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontFamily = VazirmatnFontFamily,
-                                color = SchoolBluePrimary,
-                                fontWeight = FontWeight.Bold
-                            )
-                        )
-                    }
+                        Spacer(modifier = Modifier.height(8.dp))
 
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        // Full Year Tab
-                        item {
-                            FilterChip(
-                                selected = isFullYearSelected,
-                                onClick = {
-                                    isFullYearSelected = true
-                                    selectedMonth = null
-                                },
-                                label = { Text("کل سال تحصیلی", fontFamily = VazirmatnFontFamily, fontSize = 12.sp) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = SchoolBluePrimary,
-                                    selectedLabelColor = Color.White
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            item {
+                                FilterChip(
+                                    selected = isFullYearSelected,
+                                    onClick = {
+                                        isFullYearSelected = true
+                                        selectedMonth = null
+                                    },
+                                    label = { Text("کل سال تحصیلی", fontFamily = VazirmatnFontFamily, fontSize = 12.sp) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = SchoolBluePrimary,
+                                        selectedLabelColor = Color.White
+                                    )
                                 )
-                            )
-                        }
-
-                        // 12 Months of the Academic Year
-                        items(AcademicMonth.ACADEMIC_YEAR_ORDER) { month ->
-                            val isSelected = !isFullYearSelected && selectedMonth == month
-                            val isCurrent = currentAcademicMonth == month
-
-                            // Count records for this month
-                            val monthCount = studentRecords.count {
-                                AcademicMonth.fromDate(it.date, it.createdAt) == month
                             }
 
-                            FilterChip(
-                                selected = isSelected,
-                                onClick = {
-                                    isFullYearSelected = false
-                                    selectedMonth = month
-                                },
-                                label = {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(month.persianName, fontFamily = VazirmatnFontFamily, fontSize = 12.sp)
-                                        if (isCurrent) {
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Surface(
-                                                shape = CircleShape,
-                                                color = if (isSelected) Color.White else SchoolBluePrimary,
-                                                modifier = Modifier.size(6.dp)
-                                            ) {}
-                                        }
-                                        if (monthCount > 0) {
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Surface(
-                                                shape = RoundedCornerShape(8.dp),
-                                                color = if (isSelected) Color.White.copy(alpha = 0.25f) else SchoolBluePrimary.copy(alpha = 0.15f),
-                                                modifier = Modifier.padding(1.dp)
-                                            ) {
-                                                Text(
-                                                    text = monthCount.toPersianDigits(),
-                                                    fontSize = 10.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    modifier = Modifier.padding(horizontal = 4.dp),
-                                                    color = if (isSelected) Color.White else SchoolBluePrimary
-                                                )
+                            items(AcademicMonth.ACADEMIC_YEAR_ORDER) { month ->
+                                val isSelected = !isFullYearSelected && selectedMonth == month
+                                val monthCount = studentRecords.count {
+                                    AcademicMonth.fromDate(it.date, it.createdAt) == month
+                                }
+
+                                FilterChip(
+                                    selected = isSelected,
+                                    onClick = {
+                                        isFullYearSelected = false
+                                        selectedMonth = month
+                                    },
+                                    label = {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(month.persianName, fontFamily = VazirmatnFontFamily, fontSize = 12.sp)
+                                            if (monthCount > 0) {
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Surface(
+                                                    shape = RoundedCornerShape(8.dp),
+                                                    color = if (isSelected) Color.White.copy(alpha = 0.25f) else SchoolBluePrimary.copy(alpha = 0.15f)
+                                                ) {
+                                                    Text(
+                                                        text = monthCount.toPersianDigits(),
+                                                        fontSize = 10.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        modifier = Modifier.padding(horizontal = 4.dp),
+                                                        color = if (isSelected) Color.White else SchoolBluePrimary
+                                                    )
+                                                }
                                             }
                                         }
-                                    }
-                                },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = SchoolBluePrimary,
-                                    selectedLabelColor = Color.White
-                                )
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Monthly Summary Card & Conduct Score
-            item {
-                MonthlyStatusCard(
-                    monthTitle = if (isFullYearSelected) "کارنامه کل سال تحصیلی" else "کارنامه ماه ${selectedMonth?.persianName ?: ""}",
-                    monthlyScore = monthlyScore,
-                    positiveCount = positiveRecords.size,
-                    negativeCount = negativeRecords.size,
-                    onAddPositiveClick = {
-                        quickAddIsPositive = true
-                        showQuickAddDialog = true
-                    },
-                    onAddNegativeClick = {
-                        quickAddIsPositive = false
-                        showQuickAddDialog = true
-                    }
-                )
-            }
-
-            // Section 1: Positive Behaviors in this month
-            item {
-                SectionHeader(
-                    title = "رفتارهای مثبت و تشویقی (${positiveRecords.size.toPersianDigits()} مورد)",
-                    icon = Icons.Default.CheckCircle,
-                    tint = PositiveGreen
-                )
-            }
-
-            if (positiveRecords.isEmpty()) {
-                item {
-                    EmptyRecordCard(
-                        text = "در این ماه هیچ رفتار مثبت یا تشویقی برای دانش‌آموز ثبت نشده است.",
-                        actionText = "+ ثبت تشویق برای این ماه",
-                        onClick = {
-                            quickAddIsPositive = true
-                            showQuickAddDialog = true
-                        }
-                    )
-                }
-            } else {
-                items(positiveRecords, key = { it.id }) { record ->
-                    BehaviorItemCard(record = record, isPositive = true)
-                }
-            }
-
-            // Section 2: Disciplinary Violations in this month
-            item {
-                Spacer(modifier = Modifier.height(6.dp))
-                SectionHeader(
-                    title = "موارد و تخلفات انضباطی (${negativeRecords.size.toPersianDigits()} مورد)",
-                    icon = Icons.Default.Report,
-                    tint = IncidentRed
-                )
-            }
-
-            if (negativeRecords.isEmpty()) {
-                item {
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = PositiveGreen.copy(alpha = 0.08f)),
-                        border = BorderStroke(1.dp, PositiveGreen.copy(alpha = 0.25f))
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(16.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.CheckCircle,
-                                contentDescription = null,
-                                tint = PositiveGreen,
-                                modifier = Modifier.size(24.dp)
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(
-                                text = "عالی! هیچ مورد یا تخلف انضباطی در این ماه برای دانش‌آموز ثبت نشده است.",
-                                style = MaterialTheme.typography.bodySmall.copy(
-                                    fontFamily = VazirmatnFontFamily,
-                                    fontWeight = FontWeight.Medium,
-                                    color = PositiveGreen
-                                )
-                            )
-                        }
-                    }
-                }
-            } else {
-                items(negativeRecords, key = { it.id }) { record ->
-                    BehaviorItemCard(record = record, isPositive = false)
-                }
-            }
-        }
-    }
-
-    // Quick Registration Dialog for this Student & Month
-    if (showQuickAddDialog && student != null) {
-        QuickAddBehaviorDialog(
-            student = student,
-            isPositive = quickAddIsPositive,
-            selectedMonth = selectedMonth ?: currentAcademicMonth,
-            currentUser = currentUser,
-            onDismiss = { showQuickAddDialog = false },
-            onSave = { title, category, description, points, severity ->
-                val monthName = selectedMonth?.persianName ?: currentAcademicMonth.persianName
-                val date = "۱۴۰۳/${selectedMonth?.monthNumber ?: currentAcademicMonth.monthNumber}/۱۵".toPersianDigits()
-                val time = DateTimeUtils.getCurrentTime()
-
-                mainViewModel.registerBehaviorRecord(
-                    studentId = student.id,
-                    type = if (quickAddIsPositive) RecordType.POSITIVE else RecordType.DISCIPLINARY,
-                    category = category,
-                    title = title,
-                    description = description,
-                    date = date,
-                    time = time,
-                    location = if (quickAddIsPositive) "کلاس درس" else "آموزشگاه",
-                    severity = severity,
-                    points = points,
-                    createdBy = currentUser?.name ?: "مدیریت مدرسه",
-                    createdByRole = currentUser?.role ?: UserRole.VICE_PRINCIPAL
-                )
-                showQuickAddDialog = false
-                Toast.makeText(context, "مورد جدید با موفقیت در پرونده ماه $monthName ثبت شد.", Toast.LENGTH_SHORT).show()
-            }
-        )
-    }
-}
-
-@Composable
-fun StudentOfficialDossierHeader(student: Student, totalRecords: Int) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            // Ministry / School Official Subheader
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "وزارت آموزش و پرورش • سامانه نظام‌یار",
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontFamily = VazirmatnFontFamily,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                )
-                Surface(
-                    shape = RoundedCornerShape(6.dp),
-                    color = IncidentRed.copy(alpha = 0.1f)
-                ) {
-                    Text(
-                        text = "🔒 پرونده محرمانه انضباطی",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontFamily = VazirmatnFontFamily,
-                            color = IncidentRed,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold
-                        ),
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                    )
-                }
-            }
-
-            HorizontalDivider(
-                modifier = Modifier.padding(vertical = 10.dp),
-                thickness = 0.5.dp,
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-            )
-
-            // Auto-populated student particulars
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Avatar
-                Box(
-                    modifier = Modifier
-                        .size(62.dp)
-                        .clip(CircleShape)
-                        .background(
-                            Brush.linearGradient(
-                                colors = listOf(SchoolBluePrimary, SchoolBluePrimary.copy(alpha = 0.75f))
-                            )
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = student.fullName.take(2),
-                        color = Color.White,
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontFamily = VazirmatnFontFamily,
-                            fontWeight = FontWeight.Bold
-                        )
-                    )
-                }
-
-                Spacer(modifier = Modifier.width(14.dp))
-
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = student.fullName,
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontFamily = VazirmatnFontFamily,
-                            fontWeight = FontWeight.Bold
-                        )
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "${student.grade} - ${student.className}",
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            fontFamily = VazirmatnFontFamily,
-                            color = SchoolBluePrimary,
-                            fontWeight = FontWeight.Bold
-                        )
-                    )
-                    Text(
-                        text = "کد دانش‌آموزی: ${student.studentCode.toPersianDigits()}  |  کد ملی: ${(student.nationalId.ifBlank { "ثبت در سامانه" }).toPersianDigits()}",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontFamily = VazirmatnFontFamily,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Student Ranks & Badges if assigned
-            if (student.allRanks.isNotEmpty() && student.allRanks != listOf("دانش‌آموز")) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    student.allRanks.forEach { rank ->
-                        val badgeColor = try {
-                            Color(android.graphics.Color.parseColor(if (student.rankColorHex.startsWith("#")) student.rankColorHex else "#${student.rankColorHex}"))
-                        } catch (_: Exception) {
-                            SchoolBluePrimary
-                        }
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = badgeColor.copy(alpha = 0.12f),
-                            border = BorderStroke(0.5.dp, badgeColor.copy(alpha = 0.4f))
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(Icons.Default.Star, contentDescription = null, tint = badgeColor, modifier = Modifier.size(12.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = rank,
-                                    style = MaterialTheme.typography.labelSmall.copy(
-                                        fontFamily = VazirmatnFontFamily,
-                                        fontWeight = FontWeight.Bold,
-                                        color = badgeColor,
-                                        fontSize = 11.sp
+                                    },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = SchoolBluePrimary,
+                                        selectedLabelColor = Color.White
                                     )
                                 )
                             }
                         }
                     }
                 }
-                Spacer(modifier = Modifier.height(10.dp))
-            }
 
-            // Family / Guardian and Birth details grid
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                // SECTION 1: POSITIVE ITEMS (موارد مثبت)
+                item {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text(
-                            text = "نام ولی: ${student.parentName.ifBlank { "ثبت در پرونده" }}",
-                            style = MaterialTheme.typography.bodySmall.copy(fontFamily = VazirmatnFontFamily)
-                        )
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                imageVector = Icons.Default.Phone,
+                                imageVector = Icons.Default.CheckCircle,
                                 contentDescription = null,
-                                modifier = Modifier.size(13.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                tint = PositiveGreen,
+                                modifier = Modifier.size(20.dp)
                             )
-                            Spacer(modifier = Modifier.width(4.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = (student.parentPhone.ifBlank { "---" }).toPersianDigits(),
-                                style = MaterialTheme.typography.bodySmall.copy(fontFamily = VazirmatnFontFamily)
+                                text = "موارد مثبت (${positiveRecords.size.toPersianDigits()})",
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontFamily = VazirmatnFontFamily,
+                                    fontWeight = FontWeight.Bold,
+                                    color = PositiveGreen
+                                )
                             )
                         }
                     }
+                }
 
-                    Spacer(modifier = Modifier.height(4.dp))
+                if (positiveRecords.isEmpty()) {
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                        ) {
+                            Text(
+                                text = "هیچ رفتار مثبتی برای این بازه ثبت نشده است.",
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontFamily = VazirmatnFontFamily,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                ),
+                                modifier = Modifier.padding(14.dp)
+                            )
+                        }
+                    }
+                } else {
+                    items(positiveRecords) { rec ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            border = BorderStroke(1.dp, PositiveGreen.copy(alpha = 0.3f))
+                        ) {
+                            Column(modifier = Modifier.padding(14.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = PositiveGreen.copy(alpha = 0.12f)
+                                    ) {
+                                        Text(
+                                            text = "تعداد مثبت: ${(rec.points ?: 1).toPersianDigits()}",
+                                            style = MaterialTheme.typography.labelMedium.copy(
+                                                fontFamily = VazirmatnFontFamily,
+                                                fontWeight = FontWeight.Bold,
+                                                color = PositiveGreen
+                                            ),
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        )
+                                    }
 
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            text = "${rec.date} - ${rec.time}",
+                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                fontFamily = VazirmatnFontFamily,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        IconButton(
+                                            onClick = { recordToDelete = rec },
+                                            modifier = Modifier.size(28.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Delete,
+                                                contentDescription = "حذف",
+                                                tint = IncidentRed,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(8.dp))
+
+                                Text(
+                                    text = rec.title.ifBlank { rec.description },
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        fontFamily = VazirmatnFontFamily,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                )
+
+                                if (rec.description.isNotBlank() && rec.description != rec.title) {
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = rec.description,
+                                        style = MaterialTheme.typography.bodySmall.copy(
+                                            fontFamily = VazirmatnFontFamily,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    )
+                                }
+
+                                if (!rec.imageUrl.isNullOrBlank()) {
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    OutlinedButton(
+                                        onClick = { previewImageUrl = rec.imageUrl },
+                                        shape = RoundedCornerShape(8.dp),
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                                    ) {
+                                        Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("مشاهده و زوم عکس پیوست", fontSize = 11.sp, fontFamily = VazirmatnFontFamily)
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = "ثبت توسط: ${rec.createdBy}",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontFamily = VazirmatnFontFamily,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+
+                item {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 8.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    )
+                }
+
+                // SECTION 2: DISCIPLINARY ITEMS (موارد انضباطی)
+                item {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text(
-                            text = "تاریخ تولد: ${student.birthDate.toPersianDigits()} (${student.gender})",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontFamily = VazirmatnFontFamily,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontSize = 11.sp
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Report,
+                                contentDescription = null,
+                                tint = IncidentRed,
+                                modifier = Modifier.size(20.dp)
                             )
-                        )
-                        Text(
-                            text = "کل سوابق ثبت‌شده: ${totalRecords.toPersianDigits()} مورد",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontFamily = VazirmatnFontFamily,
-                                color = SchoolBluePrimary,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 11.sp
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "موارد انضباطی (${disciplinaryRecords.size.toPersianDigits()})",
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontFamily = VazirmatnFontFamily,
+                                    fontWeight = FontWeight.Bold,
+                                    color = IncidentRed
+                                )
                             )
-                        )
+                        }
+                    }
+                }
+
+                if (disciplinaryRecords.isEmpty()) {
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                        ) {
+                            Text(
+                                text = "هیچ مورد انضباطی برای این بازه ثبت نشده است.",
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontFamily = VazirmatnFontFamily,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                ),
+                                modifier = Modifier.padding(14.dp)
+                            )
+                        }
+                    }
+                } else {
+                    items(disciplinaryRecords) { rec ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            border = BorderStroke(1.dp, IncidentRed.copy(alpha = 0.3f))
+                        ) {
+                            Column(modifier = Modifier.padding(14.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = IncidentRed.copy(alpha = 0.12f)
+                                    ) {
+                                        Text(
+                                            text = rec.category.ifBlank { "مورد انضباطی" },
+                                            style = MaterialTheme.typography.labelMedium.copy(
+                                                fontFamily = VazirmatnFontFamily,
+                                                fontWeight = FontWeight.Bold,
+                                                color = IncidentRed
+                                            ),
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        )
+                                    }
+
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            text = "${rec.date} - ${rec.time}",
+                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                fontFamily = VazirmatnFontFamily,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        IconButton(
+                                            onClick = { recordToDelete = rec },
+                                            modifier = Modifier.size(28.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Delete,
+                                                contentDescription = "حذف",
+                                                tint = IncidentRed,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(8.dp))
+
+                                Text(
+                                    text = rec.title.ifBlank { rec.description },
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        fontFamily = VazirmatnFontFamily,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                )
+
+                                if (rec.description.isNotBlank() && rec.description != rec.title) {
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = rec.description,
+                                        style = MaterialTheme.typography.bodySmall.copy(
+                                            fontFamily = VazirmatnFontFamily,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    )
+                                }
+
+                                if (!rec.imageUrl.isNullOrBlank()) {
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    OutlinedButton(
+                                        onClick = { previewImageUrl = rec.imageUrl },
+                                        shape = RoundedCornerShape(8.dp),
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                                    ) {
+                                        Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("مشاهده و زوم عکس پیوست", fontSize = 11.sp, fontFamily = VazirmatnFontFamily)
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = "ثبت توسط: ${rec.createdBy}",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontFamily = VazirmatnFontFamily,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                )
+                            }
+                        }
                     }
                 }
             }
         }
     }
-}
 
-@Composable
-fun MonthlyStatusCard(
-    monthTitle: String,
-    monthlyScore: Int,
-    positiveCount: Int,
-    negativeCount: Int,
-    onAddPositiveClick: () -> Unit,
-    onAddNegativeClick: () -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+    // Delete confirmation dialog
+    if (recordToDelete != null) {
+        val targetRec = recordToDelete!!
+        AlertDialog(
+            onDismissRequest = { recordToDelete = null },
+            title = {
                 Text(
-                    text = monthTitle,
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontFamily = VazirmatnFontFamily,
-                        fontWeight = FontWeight.Bold
-                    )
+                    text = "تأیید حذف از پرونده انضباطی",
+                    fontFamily = VazirmatnFontFamily,
+                    fontWeight = FontWeight.Bold
                 )
-
-                // Monthly Conduct Score Pill
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = if (monthlyScore >= 90) PositiveGreen.copy(alpha = 0.15f) else WarningAmber.copy(alpha = 0.15f)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "نمره انضباط: ",
-                            style = MaterialTheme.typography.labelSmall.copy(fontFamily = VazirmatnFontFamily)
-                        )
-                        Text(
-                            text = "${monthlyScore.toPersianDigits()} / ۱۰۰",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontFamily = VazirmatnFontFamily,
-                                fontWeight = FontWeight.Bold,
-                                color = if (monthlyScore >= 90) PositiveGreen else WarningAmber
-                            )
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Two stat badges
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                // Positive stats box
-                Card(
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = PositiveGreen.copy(alpha = 0.09f))
-                ) {
-                    Column(
-                        modifier = Modifier.padding(10.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = "تشویق‌ها و موارد مثبت",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontFamily = VazirmatnFontFamily,
-                                color = PositiveGreen,
-                                fontSize = 11.sp
-                            )
-                        )
-                        Text(
-                            text = "${positiveCount.toPersianDigits()} مورد",
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontFamily = VazirmatnFontFamily,
-                                fontWeight = FontWeight.Bold,
-                                color = PositiveGreen
-                            )
-                        )
-                    }
-                }
-
-                // Negative stats box
-                Card(
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = IncidentRed.copy(alpha = 0.09f))
-                ) {
-                    Column(
-                        modifier = Modifier.padding(10.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = "تخلفات و موارد انضباطی",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontFamily = VazirmatnFontFamily,
-                                color = IncidentRed,
-                                fontSize = 11.sp
-                            )
-                        )
-                        Text(
-                            text = "${negativeCount.toPersianDigits()} مورد",
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontFamily = VazirmatnFontFamily,
-                                fontWeight = FontWeight.Bold,
-                                color = IncidentRed
-                            )
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            // Quick add buttons for this month
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
+            },
+            text = {
+                Text(
+                    text = "آیا از حذف «${targetRec.title.ifBlank { targetRec.category }}» از پرونده این دانش‌آموز اطمینان دارید؟ این سابقه به طور کامل پاک خواهد شد.",
+                    fontFamily = VazirmatnFontFamily
+                )
+            },
+            confirmButton = {
                 Button(
-                    onClick = onAddPositiveClick,
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = PositiveGreen)
-                ) {
-                    Icon(Icons.Default.AddCircle, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("ثبت تشویق این ماه", style = MaterialTheme.typography.labelSmall.copy(fontFamily = VazirmatnFontFamily))
-                }
-
-                Button(
-                    onClick = onAddNegativeClick,
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(10.dp),
+                    onClick = {
+                        mainViewModel.deleteBehaviorRecord(targetRec.id)
+                        recordToDelete = null
+                        Toast.makeText(context, "مورد موردنظر با موفقیت از پرونده حذف شد.", Toast.LENGTH_SHORT).show()
+                    },
                     colors = ButtonDefaults.buttonColors(containerColor = IncidentRed)
                 ) {
-                    Icon(Icons.Default.RemoveCircle, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("ثبت تخلف این ماه", style = MaterialTheme.typography.labelSmall.copy(fontFamily = VazirmatnFontFamily))
+                    Text("حذف شود", fontFamily = VazirmatnFontFamily, color = Color.White)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { recordToDelete = null }) {
+                    Text("انصراف", fontFamily = VazirmatnFontFamily)
                 }
             }
-        }
-    }
-}
-
-@Composable
-fun BehaviorItemCard(record: BehaviorRecord, isPositive: Boolean) {
-    val accentColor = if (isPositive) PositiveGreen else IncidentRed
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 2.dp),
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-    ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = if (isPositive) Icons.Default.CheckCircle else Icons.Default.Report,
-                        contentDescription = null,
-                        tint = accentColor,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = record.title,
-                        style = MaterialTheme.typography.titleSmall.copy(
-                            fontFamily = VazirmatnFontFamily,
-                            fontWeight = FontWeight.Bold
-                        )
-                    )
-                }
-
-                Surface(
-                    shape = RoundedCornerShape(6.dp),
-                    color = accentColor.copy(alpha = 0.1f)
-                ) {
-                    Text(
-                        text = if (isPositive) "+${(record.points ?: 2).toPersianDigits()} امتیاز" else "-${(record.points ?: 1).toPersianDigits()} نمره",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontFamily = VazirmatnFontFamily,
-                            color = accentColor,
-                            fontWeight = FontWeight.Bold
-                        ),
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                    )
-                }
-            }
-
-            if (record.description.isNotBlank()) {
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = record.description,
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        fontFamily = VazirmatnFontFamily,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    ),
-                    lineHeight = 18.sp
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "دسته: ${record.category}",
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontFamily = VazirmatnFontFamily,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                )
-                Text(
-                    text = "ثبت‌کننده: ${record.createdBy}  |  ${record.date} (${record.time})",
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontFamily = VazirmatnFontFamily,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 10.sp
-                    )
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun SectionHeader(title: String, icon: androidx.compose.ui.graphics.vector.ImageVector, tint: Color) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(imageVector = icon, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
-        Spacer(modifier = Modifier.width(6.dp))
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleSmall.copy(
-                fontFamily = VazirmatnFontFamily,
-                fontWeight = FontWeight.Bold
-            )
         )
     }
-}
 
-@Composable
-fun EmptyRecordCard(text: String, actionText: String, onClick: () -> Unit) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = text,
-                style = MaterialTheme.typography.bodySmall.copy(
-                    fontFamily = VazirmatnFontFamily,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                ),
-                textAlign = TextAlign.Center
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            TextButton(onClick = onClick) {
-                Text(actionText, fontFamily = VazirmatnFontFamily, fontWeight = FontWeight.Bold)
-            }
-        }
+    // Zoomable Image Viewer Dialog
+    if (!previewImageUrl.isNullOrBlank()) {
+        com.example.presentation.components.ZoomableImageViewerDialog(
+            imageUrlOrBase64 = previewImageUrl,
+            onDismiss = { previewImageUrl = null }
+        )
     }
-}
-
-@Composable
-fun QuickAddBehaviorDialog(
-    student: Student,
-    isPositive: Boolean,
-    selectedMonth: AcademicMonth,
-    currentUser: User?,
-    onDismiss: () -> Unit,
-    onSave: (title: String, category: String, description: String, points: Int, severity: SeverityLevel) -> Unit
-) {
-    var title by remember { mutableStateOf("") }
-    var category by remember { mutableStateOf(if (isPositive) "اخلاقی و انضباطی" else "انضباطی") }
-    var description by remember { mutableStateOf("") }
-    var points by remember { mutableIntStateOf(if (isPositive) 2 else 1) }
-
-    val positivePresets = listOf("رعایت اخلاق حسنه", "همکاری با اولیای مدرسه", "کوشش در نظافت کلاس", "پیشرفت چشمگیر در درس", "نماز جماعت و فعالیت پرورشی")
-    val negativePresets = listOf("تأخیر در ورود به مدرسه", "بی‌نظمی در کلاس درس", "عدم رعایت پوشش و آراستگی", "عدم انجام تکالیف محوله", "غیبت غیرموجه")
-
-    val presets = if (isPositive) positivePresets else negativePresets
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(
-                text = if (isPositive) "ثبت رفتار مثبت برای ماه ${selectedMonth.persianName}" else "ثبت تخلف انضباطی برای ماه ${selectedMonth.persianName}",
-                fontFamily = VazirmatnFontFamily,
-                fontWeight = FontWeight.Bold
-            )
-        },
-        text = {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    text = "دانش‌آموز: ${student.fullName} (${student.className})",
-                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = VazirmatnFontFamily, color = SchoolBluePrimary)
-                )
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Text("عناوین پرتکرار و پیشنهادی:", style = MaterialTheme.typography.labelSmall.copy(fontFamily = VazirmatnFontFamily))
-                Spacer(modifier = Modifier.height(4.dp))
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(presets) { p ->
-                        FilterChip(
-                            selected = title == p,
-                            onClick = { title = p },
-                            label = { Text(p, fontSize = 11.sp, fontFamily = VazirmatnFontFamily) }
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it },
-                    label = { Text(if (isPositive) "عنوان رفتار مثبت *" else "عنوان تخلف انضباطی *", fontFamily = VazirmatnFontFamily) },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                OutlinedTextField(
-                    value = description,
-                    onValueChange = { description = it },
-                    label = { Text("توضیحات و جزئیات (اختیاری)", fontFamily = VazirmatnFontFamily) },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    minLines = 2
-                )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    if (title.isNotBlank()) {
-                        onSave(title, category, description, points, SeverityLevel.MEDIUM)
-                    }
-                },
-                enabled = title.isNotBlank(),
-                colors = ButtonDefaults.buttonColors(containerColor = if (isPositive) PositiveGreen else IncidentRed)
-            ) {
-                Text("ثبت در پرونده ماه ${selectedMonth.persianName}", fontFamily = VazirmatnFontFamily)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("انصراف", fontFamily = VazirmatnFontFamily)
-            }
-        }
-    )
-}
-
-private fun shareOfficialDossier(
-    context: Context,
-    student: Student,
-    month: AcademicMonth?,
-    isFullYear: Boolean,
-    records: List<BehaviorRecord>,
-    monthlyScore: Int
-) {
-    val monthTitle = if (isFullYear || month == null) "کل سال تحصیلی ۱۴۰۳-۱۴۰۴" else "ماه ${month.persianName}"
-    val sb = StringBuilder()
-    sb.appendLine("📋 «گزارش رسمی پرونده انضباطی و تربیتی دانش‌آموز»")
-    sb.appendLine("وزارت آموزش و پرورش - سامانه مدرسه")
-    sb.appendLine("----------------------------------------")
-    sb.appendLine("نام و نام خانوادگی: ${student.fullName}")
-    sb.appendLine("کد دانش‌آموزی: ${student.studentCode}")
-    sb.appendLine("پایه و کلاس: ${student.grade} - ${student.className}")
-    sb.appendLine("نام ولی: ${student.parentName} (${student.parentPhone})")
-    sb.appendLine("بازه پرونده: $monthTitle")
-    sb.appendLine("نمره انضباط این دوره: $monthlyScore از ۱۰۰")
-    sb.appendLine("----------------------------------------")
-
-    val positives = records.filter { it.type.isPositive }
-    val negatives = records.filter { !it.type.isPositive }
-
-    sb.appendLine("🟢 تشویق‌ها و رفتارهای مثبت (${positives.size} مورد):")
-    if (positives.isEmpty()) {
-        sb.appendLine(" - موردی ثبت نشده است.")
-    } else {
-        positives.forEachIndexed { index, r ->
-            sb.appendLine(" ${index + 1}. ${r.title} | ${r.date} (+${r.points ?: 2} امتیاز)")
-            if (r.description.isNotBlank()) sb.appendLine("    شرح: ${r.description}")
-        }
-    }
-
-    sb.appendLine("\n🔴 تخلفات و تذکرات انضباطی (${negatives.size} مورد):")
-    if (negatives.isEmpty()) {
-        sb.appendLine(" - هیچ تخلفی ثبت نشده است.")
-    } else {
-        negatives.forEachIndexed { index, r ->
-            sb.appendLine(" ${index + 1}. ${r.title} | ${r.date} (-${r.points ?: 1} نمره)")
-            if (r.description.isNotBlank()) sb.appendLine("    شرح: ${r.description}")
-        }
-    }
-
-    sb.appendLine("----------------------------------------")
-    sb.appendLine("تاریخ صدور گزارش: ${DateTimeUtils.getCurrentPersianDate()} - ساعت ${DateTimeUtils.getCurrentTime()}")
-    sb.appendLine("تأییدیه: شورای انضباطی و مدیریت آموزشگاه")
-
-    val intent = Intent(Intent.ACTION_SEND).apply {
-        type = "text/plain"
-        putExtra(Intent.EXTRA_SUBJECT, "پرونده انضباطی ${student.fullName}")
-        putExtra(Intent.EXTRA_TEXT, sb.toString())
-    }
-    context.startActivity(Intent.createChooser(intent, "اشتراک‌گذاری گزارش رسمی پرونده"))
 }
