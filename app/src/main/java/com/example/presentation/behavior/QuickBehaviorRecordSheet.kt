@@ -26,11 +26,18 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import com.example.domain.model.AcademicMonth
+import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Done
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Report
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
@@ -150,9 +157,13 @@ fun QuickBehaviorRecordSheet(
     }
 
     var description by remember { mutableStateOf("") }
+    var attachedImageBase64 by remember { mutableStateOf<String?>(null) }
     var location by remember { mutableStateOf("کلاس درس") }
     var isSubmitting by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    var selectedMonth by remember { mutableStateOf(AcademicMonth.getCurrentMonth()) }
+    var showMonthMenu by remember { mutableStateOf(false) }
 
     // Speech To Text Manager
     val speechManager = remember { PersianSpeechToTextManager(context) }
@@ -255,6 +266,56 @@ fun QuickBehaviorRecordSheet(
                             fontWeight = FontWeight.Bold,
                             fontFamily = VazirmatnFontFamily,
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Month Selector Field
+            Box(modifier = Modifier.fillMaxWidth()) {
+                OutlinedTextField(
+                    value = "ماه ثبت: ${selectedMonth.persianName} (${selectedMonth.season})",
+                    onValueChange = {},
+                    readOnly = true,
+                    label = {
+                        Text(
+                            text = "ماه ثبت در پرونده انضباطی",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontFamily = VazirmatnFontFamily,
+                                fontWeight = FontWeight.Bold
+                            )
+                        )
+                    },
+                    trailingIcon = {
+                        IconButton(onClick = { showMonthMenu = true }) {
+                            Icon(Icons.Default.ArrowDropDown, contentDescription = "انتخاب ماه")
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showMonthMenu = true }
+                        .testTag("quick_sheet_select_month"),
+                    shape = RoundedCornerShape(12.dp)
+                )
+
+                DropdownMenu(
+                    expanded = showMonthMenu,
+                    onDismissRequest = { showMonthMenu = false }
+                ) {
+                    AcademicMonth.ACADEMIC_YEAR_ORDER.forEach { m ->
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    text = "ماه ${m.persianName} (${m.season})",
+                                    fontFamily = VazirmatnFontFamily,
+                                    fontWeight = if (m == selectedMonth) FontWeight.Bold else FontWeight.Normal
+                                )
+                            },
+                            onClick = {
+                                selectedMonth = m
+                                showMonthMenu = false
+                            }
                         )
                     }
                 }
@@ -545,7 +606,87 @@ fun QuickBehaviorRecordSheet(
                 }
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Photo Attachment Section (Camera + Gallery)
+            val imagePickerLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.GetContent()
+            ) { uri: android.net.Uri? ->
+                uri?.let {
+                    try {
+                        val inputStream = context.contentResolver.openInputStream(it)
+                        val bitmap = android.graphics.BitmapFactory.decodeStream(inputStream)
+                        if (bitmap != null) {
+                            val stream = java.io.ByteArrayOutputStream()
+                            bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 80, stream)
+                            val bytes = stream.toByteArray()
+                            attachedImageBase64 = "data:image/jpeg;base64," + android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+                        }
+                    } catch (_: Exception) {}
+                }
+            }
+
+            val cameraLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.TakePicturePreview()
+            ) { bitmap: android.graphics.Bitmap? ->
+                bitmap?.let {
+                    val stream = java.io.ByteArrayOutputStream()
+                    it.compress(android.graphics.Bitmap.CompressFormat.JPEG, 80, stream)
+                    val bytes = stream.toByteArray()
+                    attachedImageBase64 = "data:image/jpeg;base64," + android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+                }
+            }
+
+            if (attachedImageBase64 != null) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, if (isPositive) PositiveGreen else IncidentRed)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.AddCircle, contentDescription = null, tint = if (isPositive) PositiveGreen else IncidentRed)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("تصویر پیوست شد ✓ (شرح متنی اختیاری است)", fontFamily = VazirmatnFontFamily, fontSize = 12.sp, color = if (isPositive) PositiveGreen else IncidentRed, fontWeight = FontWeight.Bold)
+                        }
+                        IconButton(onClick = { attachedImageBase64 = null }) {
+                            Icon(Icons.Default.Close, contentDescription = "حذف عکس", tint = IncidentRedContainer)
+                        }
+                    }
+                }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = { cameraLauncher.launch(null) },
+                        colors = ButtonDefaults.buttonColors(containerColor = if (isPositive) PositiveGreen else IncidentRed),
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.PhotoCamera, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("عکس با دوربین", fontFamily = VazirmatnFontFamily, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    OutlinedButton(
+                        onClick = { imagePickerLauncher.launch("image/*") },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("انتخاب از گالری", fontFamily = VazirmatnFontFamily, fontSize = 12.sp)
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
 
             OutlinedTextField(
                 value = description,
@@ -556,7 +697,7 @@ fun QuickBehaviorRecordSheet(
                     .testTag("behavior_description_input"),
                 placeholder = {
                     Text(
-                        "توضیحات تکمیلی رفتار دانش‌آموز را بنویسید یا با دکمه بالا صحبت کنید...",
+                        if (attachedImageBase64 != null) "توضیحات اختیاری درباره تصویر پیوست..." else "توضیحات تکمیلی رفتار دانش‌آموز را بنویسید یا با دکمه بالا صحبت کنید...",
                         fontFamily = VazirmatnFontFamily,
                         fontSize = 13.sp
                     )
@@ -596,7 +737,8 @@ fun QuickBehaviorRecordSheet(
                     onClick = {
                         if (isSubmitting) return@Button
                         val trimmedTitle = title.trim().ifBlank { selectedCategory }
-                        val trimmedDesc = description.trim().ifBlank { "ثبت شده از طریق اسکن سریع چهره" }
+                        val defaultText = if (attachedImageBase64 != null) "تصویر پیوست شده رفتار" else "ثبت شده از طریق اسکن سریع چهره"
+                        val trimmedDesc = description.trim().ifBlank { defaultText }
 
                         isSubmitting = true
                         speechManager.stopListening()
@@ -623,12 +765,14 @@ fun QuickBehaviorRecordSheet(
                             category = selectedCategory,
                             title = trimmedTitle,
                             description = trimmedDesc,
+                            date = "${com.example.core.utils.DateTimeUtils.getCurrentPersianDate()} (${selectedMonth.persianName})",
                             location = location,
                             severity = severity,
                             points = selectedPoints,
                             createdBy = creatorName,
                             createdByRole = creatorRole,
-                            parentNotified = true
+                            parentNotified = true,
+                            imageUrl = attachedImageBase64
                         )
 
                         isSubmitting = false

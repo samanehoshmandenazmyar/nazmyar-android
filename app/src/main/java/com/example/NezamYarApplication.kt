@@ -15,6 +15,8 @@ class NezamYarApplication : Application() {
         com.example.core.theme.ThemeManager.init(this)
         BannerManager.init(this)
         ClassMessengerManager.init(this)
+        com.example.core.support.SupportManager.init(this)
+        com.example.core.behavior.PrayerLockManager.init(this)
         AppContainer.init(this)
     }
 }

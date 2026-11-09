@@ -58,6 +58,21 @@ data class User(
 
     val allRanks: List<String>
         get() = (listOf(rankTitle) + extraRanks).filter { it.isNotBlank() }.distinct()
+
+    val isSupportStaff: Boolean
+        get() = isCreator ||
+                role == UserRole.MANAGER ||
+                role == UserRole.VICE_PRINCIPAL ||
+                permissions.contains(RankPermission.SUPPORT_STAFF) ||
+                allRanks.any { it.contains("پشتیبان", ignoreCase = true) || it.contains("پشتیبانی", ignoreCase = true) }
+
+    fun hasGoodRank(): Boolean {
+        val isTop = isCreator || role == UserRole.MANAGER || role == UserRole.VICE_PRINCIPAL || role == UserRole.TEACHER
+        val hasSpecialRank = rankTitle.isNotBlank() && rankTitle != "دانش‌آموز" && rankTitle != "ولی دانش‌آموز"
+        val hasMultipleRanks = extraRanks.isNotEmpty()
+        val hasSpecialBadge = permissions.contains(RankPermission.SPECIAL_BADGE)
+        return isTop || hasSpecialRank || hasMultipleRanks || hasSpecialBadge
+    }
 }
 
 data class CustomRank(
@@ -76,13 +91,29 @@ object RankPermission {
     const val VIEW_STUDENT_PROFILES = "VIEW_STUDENT_PROFILES"
     const val EDIT_CLASS_INFO = "EDIT_CLASS_INFO"
     const val SPECIAL_BADGE = "SPECIAL_BADGE"
+    const val SUPPORT_STAFF = "SUPPORT_STAFF"
+    const val TEACHER_ACCESS = "TEACHER_ACCESS"
+    const val CREATE_POLLS = "CREATE_POLLS"
+    const val MANAGE_BANNERS = "MANAGE_BANNERS"
+    const val MANAGE_REPORT_CARDS = "MANAGE_REPORT_CARDS"
+    const val MANAGE_FACE_SCAN = "MANAGE_FACE_SCAN"
+    const val PUBLISH_UPDATES = "PUBLISH_UPDATES"
+    const val REGISTER_PRAYER = "REGISTER_PRAYER"
 
     val all = listOf(
         REGISTER_POSITIVE to "امکان ثبت رفتار مثبت برای هم‌کلاسی‌ها (همیار معلم)",
         REGISTER_DISCIPLINARY to "امکان ثبت گزارش و تذکر انضباطی",
+        REGISTER_PRAYER to "ثبت و ارزیابی حضور در نماز (نمازیار / مسئول پرورشی)",
         VIEW_REPORTS to "مشاهده گزارش‌ها و آمار کلاسی",
-        ACCESS_GAMES to "دسترسی آزاد به بخش بازی‌ها (شطرنج و سرگرمی)",
+        TEACHER_ACCESS to "دسترسی معلم (انتخاب پایه، شعبه و دروس تدریس)",
+        CREATE_POLLS to "ایجاد و انتشار نظرسنجی جدید",
+        MANAGE_REPORT_CARDS to "مدیریت و بارگذاری کارنامه دانش‌آموزان",
+        MANAGE_FACE_SCAN to "اسکن و احراز هویت چهره",
+        MANAGE_BANNERS to "مدیریت بنرهای صفحه اصلی",
+        PUBLISH_UPDATES to "انتشار و مدیریت بروزرسانی برنامه",
+        SUPPORT_STAFF to "پاسخگویی به سوالات و تیکت‌های پشتیبانی کاربران",
         VIEW_STUDENT_PROFILES to "مشاهده سوابق و پرونده رفتاری دانش‌آموزان",
+        ACCESS_GAMES to "دسترسی آزاد به بخش بازی‌ها (شطرنج و سرگرمی)",
         EDIT_CLASS_INFO to "همیار کلاسی (مدیریت مشخصات و اطلاعیه‌ها)",
         SPECIAL_BADGE to "نمایش نشان و کادر رنگی برجسته در سامانه"
     )

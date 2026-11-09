@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Class
 import androidx.compose.material.icons.filled.Report
+import androidx.compose.material.icons.filled.VolunteerActivism
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -64,6 +65,7 @@ fun TeacherDashboardScreen(
     onNavigateToDisciplinary: () -> Unit,
     onNavigateToStudents: () -> Unit,
     onNavigateToNotifications: () -> Unit,
+    onNavigateToPrayer: () -> Unit = {},
     onNavigateToPtaVoting: () -> Unit = {},
     onNavigateToFaceScan: () -> Unit = {},
     onNavigateToFaceEnrollment: () -> Unit = {},
@@ -294,6 +296,18 @@ fun TeacherDashboardScreen(
                         tag = "teacher_quick_disciplinary"
                     )
                 }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                QuickActionButton(
+                    title = "ثبت نماز خواندن",
+                    icon = Icons.Default.VolunteerActivism,
+                    containerColor = Color(0xFF0D9488),
+                    contentColor = Color.White,
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = onNavigateToPrayer,
+                    tag = "teacher_quick_prayer"
+                )
             }
         }
 

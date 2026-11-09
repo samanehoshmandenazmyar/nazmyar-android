@@ -3,9 +3,14 @@ package com.example.presentation.behavior
 import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -760,7 +765,7 @@ fun StudentMonthlyDossierScreen(
 
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Text(
-                                            text = "${rec.date} - ${rec.time}",
+                                            text = "زمان انتشار و ثبت گزارش: ${rec.date} ساعت ${rec.time}",
                                             style = MaterialTheme.typography.labelSmall.copy(
                                                 fontFamily = VazirmatnFontFamily,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -804,15 +809,10 @@ fun StudentMonthlyDossierScreen(
 
                                 if (!rec.imageUrl.isNullOrBlank()) {
                                     Spacer(modifier = Modifier.height(8.dp))
-                                    OutlinedButton(
-                                        onClick = { previewImageUrl = rec.imageUrl },
-                                        shape = RoundedCornerShape(8.dp),
-                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
-                                    ) {
-                                        Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text("مشاهده و زوم عکس پیوست", fontSize = 11.sp, fontFamily = VazirmatnFontFamily)
-                                    }
+                                    RecordImageThumbnail(
+                                        imageUrlOrBase64 = rec.imageUrl,
+                                        onClick = { previewImageUrl = rec.imageUrl }
+                                    )
                                 }
 
                                 Spacer(modifier = Modifier.height(6.dp))
@@ -910,7 +910,7 @@ fun StudentMonthlyDossierScreen(
 
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Text(
-                                            text = "${rec.date} - ${rec.time}",
+                                            text = "زمان انتشار و ثبت گزارش: ${rec.date} ساعت ${rec.time}",
                                             style = MaterialTheme.typography.labelSmall.copy(
                                                 fontFamily = VazirmatnFontFamily,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -954,15 +954,10 @@ fun StudentMonthlyDossierScreen(
 
                                 if (!rec.imageUrl.isNullOrBlank()) {
                                     Spacer(modifier = Modifier.height(8.dp))
-                                    OutlinedButton(
-                                        onClick = { previewImageUrl = rec.imageUrl },
-                                        shape = RoundedCornerShape(8.dp),
-                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
-                                    ) {
-                                        Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text("مشاهده و زوم عکس پیوست", fontSize = 11.sp, fontFamily = VazirmatnFontFamily)
-                                    }
+                                    RecordImageThumbnail(
+                                        imageUrlOrBase64 = rec.imageUrl,
+                                        onClick = { previewImageUrl = rec.imageUrl }
+                                    )
                                 }
 
                                 Spacer(modifier = Modifier.height(6.dp))
@@ -1027,3 +1022,86 @@ fun StudentMonthlyDossierScreen(
         )
     }
 }
+
+@Composable
+fun RecordImageThumbnail(
+    imageUrlOrBase64: String,
+    onClick: () -> Unit
+) {
+    val bitmap: ImageBitmap? = androidx.compose.runtime.remember(imageUrlOrBase64) {
+        if (imageUrlOrBase64.startsWith("data:image") || imageUrlOrBase64.length > 500) {
+            try {
+                val cleanBase64 = if (imageUrlOrBase64.contains(",")) {
+                    imageUrlOrBase64.substringAfter(",")
+                } else {
+                    imageUrlOrBase64
+                }
+                val bytes = android.util.Base64.decode(cleanBase64, android.util.Base64.DEFAULT)
+                val bmp = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                bmp?.asImageBitmap()
+            } catch (e: Exception) {
+                null
+            }
+        } else {
+            null
+        }
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(180.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .clickable { onClick() },
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            if (bitmap != null) {
+                Image(
+                    bitmap = bitmap,
+                    contentDescription = "تصویر پیوست رفتار",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                AsyncImage(
+                    model = imageUrlOrBase64,
+                    contentDescription = "تصویر پیوست رفتار",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(8.dp),
+                shape = RoundedCornerShape(8.dp),
+                color = Color.Black.copy(alpha = 0.65f)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "بزرگ‌نمایی و زوم",
+                        color = Color.White,
+                        fontSize = 10.sp,
+                        fontFamily = VazirmatnFontFamily
+                    )
+                }
+            }
+        }
+    }
+}
+

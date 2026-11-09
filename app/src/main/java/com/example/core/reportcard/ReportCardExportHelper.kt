@@ -675,7 +675,28 @@ object ReportCardExportHelper {
         }
     }
 
+    fun getReportCardImageBitmap(card: ReportCard): Bitmap? {
+        val imgUrl = card.reportCardImageUrl
+        if (!imgUrl.isNullOrBlank()) {
+            try {
+                return if (imgUrl.startsWith("data:image")) {
+                    val cleanBase64 = imgUrl.substringAfter(",")
+                    val bytes = android.util.Base64.decode(cleanBase64, android.util.Base64.DEFAULT)
+                    android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                } else {
+                    val bytes = android.util.Base64.decode(imgUrl, android.util.Base64.DEFAULT)
+                    android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                }
+            } catch (_: Exception) {}
+        }
+        return null
+    }
+
     fun generateReportCardBitmap(card: ReportCard): Bitmap {
+        val uploadedBitmap = getReportCardImageBitmap(card)
+        if (uploadedBitmap != null) {
+            return uploadedBitmap
+        }
         val bitmap = Bitmap.createBitmap(CANVAS_WIDTH, CANVAS_HEIGHT, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         drawReportCard(canvas, card)
@@ -703,10 +724,18 @@ object ReportCardExportHelper {
     fun exportReportCardAsPdf(context: Context, card: ReportCard): File? {
         return try {
             val pdfDocument = PdfDocument()
-            val pageInfo = PdfDocument.PageInfo.Builder(CANVAS_WIDTH, CANVAS_HEIGHT, 1).create()
+            val uploadedBitmap = getReportCardImageBitmap(card)
+            val width = uploadedBitmap?.width ?: CANVAS_WIDTH
+            val height = uploadedBitmap?.height ?: CANVAS_HEIGHT
+
+            val pageInfo = PdfDocument.PageInfo.Builder(width, height, 1).create()
             val page = pdfDocument.startPage(pageInfo)
 
-            drawReportCard(page.canvas, card)
+            if (uploadedBitmap != null) {
+                page.canvas.drawBitmap(uploadedBitmap, 0f, 0f, null)
+            } else {
+                drawReportCard(page.canvas, card)
+            }
             pdfDocument.finishPage(page)
 
             val fileName = "ReportCard_${card.studentCode}_${card.academicYear.replace("-", "_")}.pdf"

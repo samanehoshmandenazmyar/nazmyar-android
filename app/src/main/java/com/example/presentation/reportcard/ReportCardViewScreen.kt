@@ -485,24 +485,44 @@ fun ReportCardViewScreen(
                             Spacer(modifier = Modifier.height(8.dp))
 
                             Text(
-                                text = "هنوز کارنامه رسمی یا گزارش عملکرد ماهانه‌ای برای این دانش‌آموز ثبت نشده است. پس از ثبت نمرات توسط کادر مدرسه، کارنامه در این قسمت قابل مشاهده و دریافت خواهد بود.",
+                                text = "هنوز کارنامه‌ای برای این دانش‌آموز ثبت نشده است. می‌توانید تصویر کارنامه را آپلود کنید یا نمرات را ثبت نمایید.",
                                 style = MaterialTheme.typography.bodyMedium,
                                 textAlign = TextAlign.Center,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 lineHeight = 22.sp
                             )
 
-                            if (isStaff) {
-                                Spacer(modifier = Modifier.height(18.dp))
+                            Spacer(modifier = Modifier.height(18.dp))
+
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
                                 Button(
-                                    onClick = { showEditDialog = true },
+                                    onClick = { reportCardImagePicker.launch("image/*") },
                                     colors = ButtonDefaults.buttonColors(containerColor = SchoolBluePrimary),
                                     shape = RoundedCornerShape(12.dp),
-                                    modifier = Modifier.testTag("empty_state_issue_card_button")
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("empty_state_upload_image_button")
                                 ) {
-                                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("ساخت و ثبت کارنامه جدید برای ${selectedSt.fullName}", fontWeight = FontWeight.Bold)
+                                    Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(20.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("ثبت و بارگذاری تصویر/عکس کارنامه", fontWeight = FontWeight.Bold)
+                                }
+
+                                if (isStaff) {
+                                    OutlinedButton(
+                                        onClick = { showEditDialog = true },
+                                        shape = RoundedCornerShape(12.dp),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .testTag("empty_state_issue_card_button")
+                                    ) {
+                                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("تنظیم نمرات دستی و ساخت کارنامه", fontWeight = FontWeight.Bold)
+                                    }
                                 }
                             }
                         }
@@ -695,27 +715,31 @@ fun ReportCardViewScreen(
                     }
                 }
 
-                // 3. STAFF MANAGEMENT ACTIONS (EDIT & DELETE & UPLOAD IMAGE)
-                if (isStaff) {
-                    item {
-                        Column(
+                // 3. IMAGE UPLOAD & MANAGEMENT ACTIONS
+                item {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 6.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { reportCardImagePicker.launch("image/*") },
+                            shape = RoundedCornerShape(12.dp),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 6.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                                .testTag("upload_report_card_image_button")
                         ) {
-                            OutlinedButton(
-                                onClick = { reportCardImagePicker.launch("image/*") },
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("upload_report_card_image_button")
-                            ) {
-                                Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("آپلود مستقیم تصویر/عکس کارنامه", fontWeight = FontWeight.Bold, fontFamily = VazirmatnFontFamily)
-                            }
+                            Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (currentCard.reportCardImageUrl.isNullOrBlank()) "ثبت و بارگذاری تصویر/عکس کارنامه" else "تغییر / ثبت مجدد تصویر کارنامه",
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = VazirmatnFontFamily
+                            )
+                        }
 
+                        if (isStaff) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)

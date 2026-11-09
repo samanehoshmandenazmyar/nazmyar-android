@@ -141,6 +141,13 @@ class MainViewModel(
     val allUsers: StateFlow<List<com.example.domain.model.User>> = authRepository.allUsers
         .stateIn(viewModelScope, SharingStarted.Eagerly, authRepository.allUsers.value)
 
+    private val _hiddenFromReportsRecordIds = MutableStateFlow<Set<String>>(emptySet())
+    val hiddenFromReportsRecordIds: StateFlow<Set<String>> = _hiddenFromReportsRecordIds.asStateFlow()
+
+    fun hideRecordFromReports(recordId: String) {
+        _hiddenFromReportsRecordIds.value = _hiddenFromReportsRecordIds.value + recordId
+    }
+
     val operationState = MutableStateFlow<OperationState>(OperationState.Idle)
 
     // Positive Registration Form State
@@ -332,6 +339,59 @@ class MainViewModel(
                 )
             } catch (_: Exception) {}
         }
+    }
+
+    fun registerPrayerRecord(
+        studentId: String,
+        prayerTime: String,
+        positiveCount: Int,
+        negativeCount: Int,
+        description: String,
+        date: String = com.example.core.utils.DateTimeUtils.getCurrentPersianDate(),
+        time: String = com.example.core.utils.DateTimeUtils.getCurrentTime(),
+        createdBy: String = "مسئول اقامه نماز",
+        createdByRole: UserRole = UserRole.VICE_PRINCIPAL,
+        parentNotified: Boolean = true,
+        imageUrl: String? = null
+    ) {
+        val net = positiveCount - negativeCount
+        val type = when {
+            net > 0 -> RecordType.POSITIVE
+            net < 0 -> RecordType.DISCIPLINARY
+            else -> RecordType.POSITIVE
+        }
+        val points = kotlin.math.abs(net)
+        val netSummary = when {
+            net > 0 -> "+$net مثبت"
+            net < 0 -> "-${kotlin.math.abs(net)} منفی"
+            else -> "خنثی (بدون تغییر امتیاز)"
+        }
+        val fullTitle = "اقامه نماز ($prayerTime)"
+        val fullDesc = buildString {
+            val userText = description.trim()
+            if (userText.isNotBlank()) {
+                append(userText)
+                append("\n")
+            }
+            append("وعده نماز: $prayerTime | ارزیابی: $positiveCount مثبت، $negativeCount منفی | نتیجه اعمال‌شده: $netSummary")
+        }
+
+        registerBehaviorRecord(
+            studentId = studentId,
+            type = type,
+            category = "نماز و فرائض دینی",
+            title = fullTitle,
+            description = fullDesc,
+            date = date,
+            time = time,
+            location = "نمازخانه آموزشگاه",
+            severity = SeverityLevel.LOW,
+            points = points,
+            createdBy = createdBy,
+            createdByRole = createdByRole,
+            parentNotified = parentNotified,
+            imageUrl = imageUrl
+        )
     }
 
     fun updateStudentFaceRegistration(

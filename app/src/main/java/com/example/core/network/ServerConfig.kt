@@ -64,6 +64,7 @@ object ServerConfig {
     val customRanksUrl: String get() = customRanksUrl(activeUrl)
     val appUpdateUrl: String get() = appUpdateUrl(activeUrl)
     val bannersUrl: String get() = bannersUrl(activeUrl)
+    val prayerLocksUrl: String get() = prayerLocksUrl(activeUrl)
 
     fun usersUrl(base: String = activeUrl): String = "${base.removeSuffix("/")}/users.json"
     fun studentsUrl(base: String = activeUrl): String = "${base.removeSuffix("/")}/students.json"
@@ -75,6 +76,7 @@ object ServerConfig {
     fun appUpdateUrl(base: String = activeUrl): String = "${base.removeSuffix("/")}/app_update.json"
     fun bannersUrl(base: String = activeUrl): String = "${base.removeSuffix("/")}/banners.json"
     fun reportCardsUrl(base: String = activeUrl): String = "${base.removeSuffix("/")}/report_cards.json"
+    fun prayerLocksUrl(base: String = activeUrl): String = "${base.removeSuffix("/")}/prayer_locks.json"
 
     fun userItemUrl(userId: String, base: String = activeUrl): String = "${base.removeSuffix("/")}/users/$userId.json"
     fun studentItemUrl(studentId: String, base: String = activeUrl): String = "${base.removeSuffix("/")}/students/$studentId.json"
@@ -82,4 +84,5 @@ object ServerConfig {
     fun customRankItemUrl(rankId: String, base: String = activeUrl): String = "${base.removeSuffix("/")}/custom_ranks/$rankId.json"
     fun bannerItemUrl(bannerId: String, base: String = activeUrl): String = "${base.removeSuffix("/")}/banners/$bannerId.json"
     fun reportCardItemUrl(cardId: String, base: String = activeUrl): String = "${base.removeSuffix("/")}/report_cards/$cardId.json"
+    fun prayerLockItemUrl(lockId: String, base: String = activeUrl): String = "${base.removeSuffix("/")}/prayer_locks/$lockId.json"
 }

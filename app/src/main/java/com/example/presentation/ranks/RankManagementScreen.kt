@@ -101,6 +101,24 @@ import com.example.ui.theme.SchoolBluePrimary
 import com.example.ui.theme.SchoolBlueContainer
 import java.util.UUID
 
+fun getRankPermissionLabel(perm: String): String = when (perm) {
+    RankPermission.REGISTER_POSITIVE -> "ثبت تشویقی"
+    RankPermission.REGISTER_DISCIPLINARY -> "ثبت گزارش"
+    RankPermission.VIEW_REPORTS -> "مشاهده آمار"
+    RankPermission.TEACHER_ACCESS -> "دسترسی معلم"
+    RankPermission.CREATE_POLLS -> "ایجاد نظرسنجی"
+    RankPermission.MANAGE_REPORT_CARDS -> "مدیریت کارنامه"
+    RankPermission.MANAGE_FACE_SCAN -> "اسکن چهره"
+    RankPermission.MANAGE_BANNERS -> "مدیریت بنرها"
+    RankPermission.PUBLISH_UPDATES -> "انتشار بروزرسانی"
+    RankPermission.SUPPORT_STAFF -> "پاسخگویی پشتیبانی"
+    RankPermission.ACCESS_GAMES -> "بازی شطرنج"
+    RankPermission.VIEW_STUDENT_PROFILES -> "پرونده دانش‌آموزان"
+    RankPermission.EDIT_CLASS_INFO -> "همیار کلاس"
+    RankPermission.SPECIAL_BADGE -> "نشان ویژه"
+    else -> perm
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun RankManagementScreen(
@@ -419,16 +437,7 @@ fun RankManagementScreen(
                                             verticalArrangement = Arrangement.spacedBy(4.dp)
                                         ) {
                                             student.permissions.forEach { perm ->
-                                                val label = when (perm) {
-                                                    RankPermission.REGISTER_POSITIVE -> "ثبت تشویقی"
-                                                    RankPermission.REGISTER_DISCIPLINARY -> "ثبت گزارش"
-                                                    RankPermission.VIEW_REPORTS -> "مشاهده آمار"
-                                                    RankPermission.ACCESS_GAMES -> "بازی شطرنج"
-                                                    RankPermission.VIEW_STUDENT_PROFILES -> "پرونده دانش‌آموزان"
-                                                    RankPermission.EDIT_CLASS_INFO -> "همیار کلاس"
-                                                    RankPermission.SPECIAL_BADGE -> "نشان ویژه"
-                                                    else -> perm
-                                                }
+                                                val label = getRankPermissionLabel(perm)
                                                 Surface(
                                                     shape = RoundedCornerShape(6.dp),
                                                     color = Color(0xFFF1F5F9),
@@ -644,16 +653,7 @@ fun RankManagementScreen(
                                             verticalArrangement = Arrangement.spacedBy(4.dp)
                                         ) {
                                             staff.permissions.forEach { perm ->
-                                                val label = when (perm) {
-                                                    RankPermission.REGISTER_POSITIVE -> "ثبت تشویقی"
-                                                    RankPermission.REGISTER_DISCIPLINARY -> "ثبت گزارش"
-                                                    RankPermission.VIEW_REPORTS -> "مشاهده آمار"
-                                                    RankPermission.ACCESS_GAMES -> "بازی شطرنج"
-                                                    RankPermission.VIEW_STUDENT_PROFILES -> "پرونده دانش‌آموزان"
-                                                    RankPermission.EDIT_CLASS_INFO -> "همیار کلاس"
-                                                    RankPermission.SPECIAL_BADGE -> "نشان ویژه"
-                                                    else -> perm
-                                                }
+                                                val label = getRankPermissionLabel(perm)
                                                 Surface(
                                                     shape = RoundedCornerShape(6.dp),
                                                     color = Color(0xFFEFF6FF),
@@ -818,16 +818,7 @@ fun RankManagementScreen(
                                         verticalArrangement = Arrangement.spacedBy(4.dp)
                                     ) {
                                         rank.permissions.forEach { perm ->
-                                            val label = when (perm) {
-                                                RankPermission.REGISTER_POSITIVE -> "ثبت تشویقی"
-                                                RankPermission.REGISTER_DISCIPLINARY -> "ثبت گزارش"
-                                                RankPermission.VIEW_REPORTS -> "مشاهده آمار"
-                                                RankPermission.ACCESS_GAMES -> "بازی شطرنج"
-                                                RankPermission.VIEW_STUDENT_PROFILES -> "پرونده دانش‌آموزان"
-                                                RankPermission.EDIT_CLASS_INFO -> "همیار کلاس"
-                                                RankPermission.SPECIAL_BADGE -> "نشان ویژه"
-                                                else -> perm
-                                            }
+                                            val label = getRankPermissionLabel(perm)
                                             Surface(
                                                 shape = RoundedCornerShape(6.dp),
                                                 color = Color(0xFFF0FDF4),

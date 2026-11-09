@@ -78,7 +78,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.demo.DemoData
+import com.example.domain.model.RankPermission
 import com.example.domain.model.User
+import com.example.domain.model.UserRole
 import com.example.domain.model.toPersianDigits
 import com.example.presentation.components.NezamYarHeader
 import com.example.presentation.components.RgbColorMixerDialog
@@ -87,6 +89,7 @@ import com.example.presentation.viewmodel.AuthViewModel
 import com.example.ui.theme.IncidentRed
 import com.example.ui.theme.PositiveGreen
 import com.example.ui.theme.SchoolBluePrimary
+import androidx.compose.material.icons.filled.Security
 
 @Composable
 fun ProfileScreen(
@@ -785,273 +788,313 @@ fun EditProfileDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // RANK AND RGB CUSTOMIZATION
-                Surface(
-                    shape = RoundedCornerShape(14.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                    border = BorderStroke(1.dp, SchoolBluePrimary.copy(alpha = 0.3f)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.Palette,
-                                contentDescription = null,
-                                tint = SchoolBluePrimary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "مدیریت رنک و رنگ‌های RGB من",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        // Primary Rank Title
-                        OutlinedTextField(
-                            value = primaryRankInput,
-                            onValueChange = { primaryRankInput = it },
-                            label = { Text("عنوان رنک اصلی من") },
-                            placeholder = { Text("مثال: سازنده، مدیر مدرسه، نخبه...") },
-                            singleLine = true,
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        // Primary RGB Color & Mixer Button
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
+                // RANK AND RGB CUSTOMIZATION (Only for Creator)
+                if (user.isCreator) {
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                        border = BorderStroke(1.dp, SchoolBluePrimary.copy(alpha = 0.3f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                val c = try {
-                                    Color(android.graphics.Color.parseColor(if (primaryColorHex.startsWith("#")) primaryColorHex else "#$primaryColorHex"))
-                                } catch (_: Exception) {
-                                    SchoolBluePrimary
-                                }
-                                Box(
-                                    modifier = Modifier
-                                        .size(28.dp)
-                                        .clip(CircleShape)
-                                        .background(c)
-                                        .border(1.5.dp, Color.White, CircleShape)
+                                Icon(
+                                    imageVector = Icons.Default.Palette,
+                                    contentDescription = null,
+                                    tint = SchoolBluePrimary,
+                                    modifier = Modifier.size(20.dp)
                                 )
-                                Spacer(modifier = Modifier.width(8.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "رنگ رنک: $primaryColorHex",
-                                    style = MaterialTheme.typography.bodySmall,
+                                    text = "مدیریت رنک و رنگ‌های RGB من (سازنده)",
+                                    style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.Bold
                                 )
                             }
 
-                            Button(
-                                onClick = { showRgbMixerForPrimary = true },
-                                colors = ButtonDefaults.buttonColors(containerColor = SchoolBluePrimary),
-                                shape = RoundedCornerShape(10.dp),
-                                modifier = Modifier.height(36.dp)
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            // Primary Rank Title
+                            OutlinedTextField(
+                                value = primaryRankInput,
+                                onValueChange = { primaryRankInput = it },
+                                label = { Text("عنوان رنک اصلی من") },
+                                placeholder = { Text("مثال: سازنده، مدیر مدرسه، نخبه...") },
+                                singleLine = true,
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            // Primary RGB Color & Mixer Button
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.ColorLens,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("ترکیب رنگ RGB", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(14.dp))
-
-                        // MULTIPLE RANKS (چند رنک همزمان)
-                        Text(
-                            text = "رنک‌های تکمیلی و همزمان (${extraRanks.size.toPersianDigits()} رنک):",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        if (extraRanks.isNotEmpty()) {
-                            FlowRow(
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                extraRanks.forEachIndexed { idx, extraRank ->
-                                    val chipColorHex = extraColors.getOrNull(idx) ?: "#8B5CF6"
-                                    val chipColor = try {
-                                        Color(android.graphics.Color.parseColor(if (chipColorHex.startsWith("#")) chipColorHex else "#$chipColorHex"))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    val c = try {
+                                        Color(android.graphics.Color.parseColor(if (primaryColorHex.startsWith("#")) primaryColorHex else "#$primaryColorHex"))
                                     } catch (_: Exception) {
-                                        Color(0xFF8B5CF6)
+                                        SchoolBluePrimary
                                     }
+                                    Box(
+                                        modifier = Modifier
+                                            .size(28.dp)
+                                            .clip(CircleShape)
+                                            .background(c)
+                                            .border(1.5.dp, Color.White, CircleShape)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "رنگ رنک: $primaryColorHex",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
 
-                                    Surface(
-                                        shape = RoundedCornerShape(8.dp),
-                                        color = chipColor.copy(alpha = 0.15f),
-                                        border = BorderStroke(1.dp, chipColor)
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                            verticalAlignment = Alignment.CenterVertically
+                                Button(
+                                    onClick = { showRgbMixerForPrimary = true },
+                                    colors = ButtonDefaults.buttonColors(containerColor = SchoolBluePrimary),
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.height(36.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.ColorLens,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("ترکیب رنگ RGB", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(14.dp))
+
+                            // MULTIPLE RANKS (چند رنک همزمان)
+                            Text(
+                                text = "رنک‌های تکمیلی و همزمان (${extraRanks.size.toPersianDigits()} رنک):",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            if (extraRanks.isNotEmpty()) {
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    extraRanks.forEachIndexed { idx, extraRank ->
+                                        val chipColorHex = extraColors.getOrNull(idx) ?: "#8B5CF6"
+                                        val chipColor = try {
+                                            Color(android.graphics.Color.parseColor(if (chipColorHex.startsWith("#")) chipColorHex else "#$chipColorHex"))
+                                        } catch (_: Exception) {
+                                            Color(0xFF8B5CF6)
+                                        }
+
+                                        Surface(
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = chipColor.copy(alpha = 0.15f),
+                                            border = BorderStroke(1.dp, chipColor)
                                         ) {
-                                            Text(
-                                                text = extraRank,
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = chipColor,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Icon(
-                                                imageVector = Icons.Default.Close,
-                                                contentDescription = "حذف این رنک",
-                                                tint = chipColor,
-                                                modifier = Modifier
-                                                    .size(14.dp)
-                                                    .clickable {
-                                                        extraRanks.removeAt(idx)
-                                                        if (idx < extraColors.size) {
-                                                            extraColors.removeAt(idx)
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(
+                                                    text = extraRank,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = chipColor,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Icon(
+                                                    imageVector = Icons.Default.Close,
+                                                    contentDescription = "حذف این رنک",
+                                                    tint = chipColor,
+                                                    modifier = Modifier
+                                                        .size(14.dp)
+                                                        .clickable {
+                                                            extraRanks.removeAt(idx)
+                                                            if (idx < extraColors.size) {
+                                                                extraColors.removeAt(idx)
+                                                            }
                                                         }
-                                                    }
-                                            )
+                                                )
+                                            }
                                         }
                                     }
                                 }
+                                Spacer(modifier = Modifier.height(8.dp))
                             }
-                            Spacer(modifier = Modifier.height(8.dp))
-                        }
 
-                        // Add Extra Rank Row
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            OutlinedTextField(
-                                value = newExtraRankInput,
-                                onValueChange = { newExtraRankInput = it },
-                                placeholder = { Text("افزودن رنک دوم/سوم...") },
-                                singleLine = true,
-                                shape = RoundedCornerShape(10.dp),
-                                modifier = Modifier.weight(1f)
-                            )
-
-                            Spacer(modifier = Modifier.width(6.dp))
-
-                            IconButton(
-                                onClick = { showRgbMixerForNewExtra = true },
-                                modifier = Modifier
-                                    .size(42.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(android.graphics.Color.parseColor(extraRankColorForNew)))
+                            // Add Extra Rank Row
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
+                                OutlinedTextField(
+                                    value = newExtraRankInput,
+                                    onValueChange = { newExtraRankInput = it },
+                                    placeholder = { Text("افزودن رنک دوم/سوم...") },
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.weight(1f)
+                                )
+
+                                Spacer(modifier = Modifier.width(6.dp))
+
+                                IconButton(
+                                    onClick = { showRgbMixerForNewExtra = true },
+                                    modifier = Modifier
+                                        .size(42.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(android.graphics.Color.parseColor(extraRankColorForNew)))
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Palette,
+                                        contentDescription = "انتخاب رنگ",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.width(6.dp))
+
+                                Button(
+                                    onClick = {
+                                        if (newExtraRankInput.isNotBlank()) {
+                                            extraRanks.add(newExtraRankInput.trim())
+                                            extraColors.add(extraRankColorForNew)
+                                            newExtraRankInput = ""
+                                        }
+                                    },
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.height(42.dp)
+                                ) {
+                                    Icon(imageVector = Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // Read-only indicator for non-creator users
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                        border = BorderStroke(1.dp, Color(0xFFCBD5E1)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
-                                    imageVector = Icons.Default.Palette,
-                                    contentDescription = "انتخاب رنگ",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(18.dp)
+                                    imageVector = Icons.Default.Security,
+                                    contentDescription = null,
+                                    tint = SchoolBluePrimary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "رنک و نشان کاربری شما",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = VazirmatnFontFamily
                                 )
                             }
-
-                            Spacer(modifier = Modifier.width(6.dp))
-
-                            Button(
-                                onClick = {
-                                    if (newExtraRankInput.isNotBlank()) {
-                                        extraRanks.add(newExtraRankInput.trim())
-                                        extraColors.add(extraRankColorForNew)
-                                        newExtraRankInput = ""
-                                    }
-                                },
-                                shape = RoundedCornerShape(10.dp),
-                                modifier = Modifier.height(42.dp)
-                            ) {
-                                Icon(imageVector = Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            UserRankBadge(user = user, isLarge = false)
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "تغییر و اعطای رنک منحصراً در اختیار سازنده سامانه می‌باشد.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontFamily = VazirmatnFontFamily
+                            )
                         }
                     }
                 }
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // TEACHING SUBJECTS & ASSIGNED CLASSES SELECTION
-                Surface(
-                    shape = RoundedCornerShape(14.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                    border = BorderStroke(1.dp, SchoolBluePrimary.copy(alpha = 0.3f)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.School,
-                                contentDescription = null,
-                                tint = SchoolBluePrimary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
+                // TEACHING SUBJECTS & ASSIGNED CLASSES SELECTION (Only for Teacher Access)
+                val hasTeacherAccess = user.isCreator || user.role == UserRole.TEACHER || user.permissions.contains(RankPermission.TEACHER_ACCESS)
+                if (hasTeacherAccess) {
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                        border = BorderStroke(1.dp, SchoolBluePrimary.copy(alpha = 0.3f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.School,
+                                    contentDescription = null,
+                                    tint = SchoolBluePrimary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "مشخصات تدریس (ویژه معلمان و کادر)",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = VazirmatnFontFamily
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
                             Text(
-                                text = "مشخصات تدریس (ویژه معلمان و کادر)",
-                                style = MaterialTheme.typography.titleSmall,
+                                text = "دروس تدریسی (قابل انتخاب از ۱۰ درس رسمی):",
+                                style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold,
                                 fontFamily = VazirmatnFontFamily
                             )
-                        }
+                            Spacer(modifier = Modifier.height(6.dp))
 
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        Text(
-                            text = "دروس تدریسی (قابل انتخاب از ۱۰ درس رسمی):",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = VazirmatnFontFamily
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            allowedSubjectsList.forEach { subj ->
-                                val isSelected = selectedTeachingSubjects.contains(subj)
-                                FilterChip(
-                                    selected = isSelected,
-                                    onClick = {
-                                        if (isSelected) selectedTeachingSubjects.remove(subj)
-                                        else selectedTeachingSubjects.add(subj)
-                                    },
-                                    label = { Text(subj, fontSize = 11.sp, fontFamily = VazirmatnFontFamily) }
-                                )
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                allowedSubjectsList.forEach { subj ->
+                                    val isSelected = selectedTeachingSubjects.contains(subj)
+                                    FilterChip(
+                                        selected = isSelected,
+                                        onClick = {
+                                            if (isSelected) selectedTeachingSubjects.remove(subj)
+                                            else selectedTeachingSubjects.add(subj)
+                                        },
+                                        label = { Text(subj, fontSize = 11.sp, fontFamily = VazirmatnFontFamily) }
+                                    )
+                                }
                             }
-                        }
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                            Spacer(modifier = Modifier.height(12.dp))
 
-                        Text(
-                            text = "شعبه‌های کلاس‌های تحت تدریس:",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = VazirmatnFontFamily
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "شعبه‌های کلاس‌های تحت تدریس:",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = VazirmatnFontFamily
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
 
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            classBranchOptions.forEach { cls ->
-                                val isSelected = selectedAssignedClasses.contains(cls)
-                                FilterChip(
-                                    selected = isSelected,
-                                    onClick = {
-                                        if (isSelected) selectedAssignedClasses.remove(cls)
-                                        else selectedAssignedClasses.add(cls)
-                                    },
-                                    label = { Text(cls, fontSize = 11.sp, fontFamily = VazirmatnFontFamily) }
-                                )
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                classBranchOptions.forEach { cls ->
+                                    val isSelected = selectedAssignedClasses.contains(cls)
+                                    FilterChip(
+                                        selected = isSelected,
+                                        onClick = {
+                                            if (isSelected) selectedAssignedClasses.remove(cls)
+                                            else selectedAssignedClasses.add(cls)
+                                        },
+                                        label = { Text(cls, fontSize = 11.sp, fontFamily = VazirmatnFontFamily) }
+                                    )
+                                }
                             }
                         }
                     }
@@ -1069,8 +1112,8 @@ fun EditProfileDialog(
                     val finalPass = passwordInput.trim().ifBlank { user.password }
                     val finalBio = bioInput.trim()
 
-                    val finalPrimaryRank = primaryRankInput.trim().ifBlank { user.rankTitle }
-                    val finalColor = primaryColorHex.trim().ifBlank { user.rankColorHex }
+                    val finalPrimaryRank = if (user.isCreator) primaryRankInput.trim().ifBlank { user.rankTitle } else user.rankTitle
+                    val finalColor = if (user.isCreator) primaryColorHex.trim().ifBlank { user.rankColorHex } else user.rankColorHex
 
                     val colorIntLong = try {
                         val hex = if (finalColor.startsWith("#")) finalColor else "#$finalColor"
@@ -1078,6 +1121,8 @@ fun EditProfileDialog(
                     } catch (_: Exception) {
                         user.rankBadgeColorHex
                     }
+
+                    val hasTeacherAccess = user.isCreator || user.role == UserRole.TEACHER || user.permissions.contains(RankPermission.TEACHER_ACCESS)
 
                     val updatedUser = user.copy(
                         name = finalName,
@@ -1091,10 +1136,10 @@ fun EditProfileDialog(
                         rankTitle = finalPrimaryRank,
                         rankColorHex = finalColor,
                         rankBadgeColorHex = colorIntLong,
-                        extraRanks = extraRanks.toList(),
-                        extraRankColors = extraColors.toList(),
-                        teachingSubjects = selectedTeachingSubjects.toList(),
-                        assignedClasses = selectedAssignedClasses.toList()
+                        extraRanks = if (user.isCreator) extraRanks.toList() else user.extraRanks,
+                        extraRankColors = if (user.isCreator) extraColors.toList() else user.extraRankColors,
+                        teachingSubjects = if (hasTeacherAccess) selectedTeachingSubjects.toList() else user.teachingSubjects,
+                        assignedClasses = if (hasTeacherAccess) selectedAssignedClasses.toList() else user.assignedClasses
                     )
 
                     onSave(updatedUser)

@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -79,6 +80,7 @@ import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -436,10 +438,11 @@ fun NezamYarHeader(
                     ) {
                         Image(
                             painter = painterResource(id = com.example.R.drawable.app_icon),
-                            contentDescription = "سامانه نظمیar",
+                            contentDescription = "سامانه نظمیار",
+                            contentScale = ContentScale.Crop,
                             modifier = Modifier
-                                .size(38.dp)
-                                .clip(RoundedCornerShape(10.dp))
+                                .fillMaxSize()
+                                .clip(RoundedCornerShape(12.dp))
                         )
                     }
 
@@ -628,7 +631,7 @@ fun BehaviorRecordCard(
                 }
 
                 Text(
-                    text = "${record.date.toPersianDigits()} - ${record.time.toPersianDigits()}",
+                    text = "زمان انتشار و ثبت گزارش: ${record.date.toPersianDigits()} ساعت ${record.time.toPersianDigits()}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

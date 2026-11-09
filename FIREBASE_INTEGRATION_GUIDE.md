@@ -7,7 +7,7 @@
 ### ۱. ایجاد پروژه در کنسول فایربیس (Firebase Console)
 1. به [Firebase Console](https://console.firebase.google.com) مراجعه فرمایید.
 2. بر روی **Add Project** کلیک کرده و نام پروژه را `nezamyar-school` تعیین کنید.
-3. یک اپلیکیشن اندروید با شناسه یکتای پکیج پروژه (`com.aistudio.nezamyar.sqvxpl`) اضافه نمایید.
+3. یک اپلیکیشن اندروید با شناسه یکتای پکیج پروژه (`com.school.nazmyar`) اضافه نمایید.
 
 ---
 

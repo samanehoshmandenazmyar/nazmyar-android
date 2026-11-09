@@ -244,13 +244,18 @@ fun PublishAppUpdateScreen(
                     sdf.format(Date())
                 }
 
+                val resolvedNotes = releaseNotes.trim().ifBlank {
+                    currentUpdateInfo?.updateMessage?.ifBlank { currentUpdateInfo?.releaseNotes }?.ifBlank { null }
+                        ?: "• بروزرسانی جدید با بهینه‌سازی عملکرد و رفع ایرادات سامانه"
+                }
+
                 val newUpdate = AppUpdateInfo(
                     versionCode = versionCode,
                     versionName = versionName.trim(),
                     minSupportedVersionCode = if (isForceUpdate) versionCode else minSupportedVersionCode,
                     isForced = isForceUpdate,
                     apkUrl = cleanUrl,
-                    updateMessage = releaseNotes.trim(),
+                    updateMessage = resolvedNotes,
                     sha256 = sha256.trim(),
                     apkSizeBytes = finalSize,
                     releaseDate = todayPersian,

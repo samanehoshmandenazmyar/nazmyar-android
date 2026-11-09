@@ -35,11 +35,14 @@ import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Cameraswitch
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.ScreenRotation
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.key
+import androidx.compose.ui.draw.rotate
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -105,6 +108,7 @@ fun FaceCaptureCameraView(
     var cameraErrorState by remember { mutableStateOf<String?>(null) }
     var retryTrigger by remember { mutableIntStateOf(0) }
     var isCapturing by remember { mutableStateOf(false) }
+    var manualRotationDegrees by remember { mutableIntStateOf(0) }
 
     // Dynamic rotation tracking
     var displayRotation by remember { mutableIntStateOf(Surface.ROTATION_0) }
@@ -265,77 +269,72 @@ fun FaceCaptureCameraView(
             }
         } else {
             // Camera Preview View
-            AndroidView(
-                factory = { ctx ->
-                    PreviewView(ctx).apply {
-                        implementationMode = PreviewView.ImplementationMode.COMPATIBLE
-                        scaleType = PreviewView.ScaleType.FILL_CENTER
-                    }
-                },
-                update = { previewView ->
-                    // Touch retryTrigger to force update re-evaluation if user clicked Retry
-                    @Suppress("UNUSED_VARIABLE")
-                    val retryVal = retryTrigger
+            key(cameraFacing, retryTrigger) {
+                AndroidView(
+                    factory = { ctx ->
+                        PreviewView(ctx).apply {
+                            implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+                            scaleType = PreviewView.ScaleType.FILL_CENTER
+                        }
+                    },
+                    update = { previewView ->
+                        @Suppress("UNUSED_VARIABLE")
+                        val retryVal = retryTrigger
 
-                    val cameraProviderFuture = ProcessCameraProvider.getInstance(previewView.context)
-                    cameraProviderFuture.addListener({
-                        try {
-                            val cameraProvider = cameraProviderFuture.get()
+                        val cameraProviderFuture = ProcessCameraProvider.getInstance(previewView.context)
+                        cameraProviderFuture.addListener({
+                            try {
+                                val cameraProvider = cameraProviderFuture.get()
 
-                            // Get current display rotation from PreviewView context or display
-                            val currentRot = previewView.display?.rotation ?: displayRotation
+                                val currentRot = previewView.display?.rotation ?: displayRotation
 
-                            val preview = Preview.Builder()
-                                .setTargetRotation(currentRot)
-                                .build().also { p ->
-                                    p.surfaceProvider = previewView.surfaceProvider
-                                }
+                                val preview = Preview.Builder()
+                                    .setTargetRotation(currentRot)
+                                    .build().also { p ->
+                                        p.surfaceProvider = previewView.surfaceProvider
+                                    }
 
-                            // Determine target selector with hardware fallback logic
-                            var targetLens = cameraFacing
-                            var cameraSelector = CameraSelector.Builder().requireLensFacing(targetLens).build()
+                                var targetLens = cameraFacing
+                                var cameraSelector = CameraSelector.Builder().requireLensFacing(targetLens).build()
 
-                            // Check availability of requested lens
-                            if (!cameraProvider.hasCamera(cameraSelector)) {
-                                // Fallback to opposite lens (Front if Back failed, or Back if Front failed)
-                                targetLens = if (targetLens == CameraSelector.LENS_FACING_BACK) {
-                                    CameraSelector.LENS_FACING_FRONT
-                                } else {
-                                    CameraSelector.LENS_FACING_BACK
-                                }
-                                cameraSelector = CameraSelector.Builder().requireLensFacing(targetLens).build()
-
-                                // If opposite lens also fails, attempt first available camera info
                                 if (!cameraProvider.hasCamera(cameraSelector)) {
-                                    val availableInfo = cameraProvider.availableCameraInfos.firstOrNull()
-                                    if (availableInfo != null) {
-                                        cameraSelector = availableInfo.cameraSelector
+                                    targetLens = if (targetLens == CameraSelector.LENS_FACING_BACK) {
+                                        CameraSelector.LENS_FACING_FRONT
                                     } else {
-                                        cameraErrorState = "هیچ دوربینی روی دستگاه یافت نشد یا دوربین غیرفعال است."
-                                        return@addListener
+                                        CameraSelector.LENS_FACING_BACK
+                                    }
+                                    cameraSelector = CameraSelector.Builder().requireLensFacing(targetLens).build()
+
+                                    if (!cameraProvider.hasCamera(cameraSelector)) {
+                                        val availableInfo = cameraProvider.availableCameraInfos.firstOrNull()
+                                        if (availableInfo != null) {
+                                            cameraSelector = availableInfo.cameraSelector
+                                        } else {
+                                            cameraErrorState = "هیچ دوربینی روی دستگاه یافت نشد یا دوربین غیرفعال است."
+                                            return@addListener
+                                        }
                                     }
                                 }
+
+                                cameraProvider.unbindAll()
+                                cameraProvider.bindToLifecycle(
+                                    lifecycleOwner,
+                                    cameraSelector,
+                                    preview,
+                                    imageCapture
+                                )
+                                cameraErrorState = null
+                            } catch (e: Exception) {
+                                Log.e("CameraSetup", "Failed to bind camera use cases", e)
+                                cameraErrorState = "بروز خطا هنگام اتصال به دوربین: ${e.localizedMessage ?: "دوربین ناموفق بود"}"
                             }
-
-                            // Keep current working camera facing state synced
-                            cameraFacing = targetLens
-
-                            cameraProvider.unbindAll()
-                            cameraProvider.bindToLifecycle(
-                                lifecycleOwner,
-                                cameraSelector,
-                                preview,
-                                imageCapture
-                            )
-                            cameraErrorState = null
-                        } catch (e: Exception) {
-                            Log.e("CameraSetup", "Failed to bind camera use cases", e)
-                            cameraErrorState = "بروز خطا هنگام اتصال به دوربین: ${e.localizedMessage ?: "دوربین ناموفق بود"}"
-                        }
-                    }, ContextCompat.getMainExecutor(previewView.context))
-                },
-                modifier = Modifier.fillMaxSize()
-            )
+                        }, ContextCompat.getMainExecutor(previewView.context))
+                    },
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .rotate(manualRotationDegrees.toFloat())
+                )
+            }
 
             // UI Reticle & Control Overlay
             Column(
@@ -380,23 +379,45 @@ fun FaceCaptureCameraView(
                         )
                     }
 
-                    IconButton(
-                        onClick = {
-                            cameraFacing = if (cameraFacing == CameraSelector.LENS_FACING_BACK) {
-                                CameraSelector.LENS_FACING_FRONT
-                            } else {
-                                CameraSelector.LENS_FACING_BACK
-                            }
-                        },
-                        modifier = Modifier
-                            .background(Color.Black.copy(alpha = 0.5f), CircleShape)
-                            .testTag("switch_camera_btn")
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Cameraswitch,
-                            contentDescription = "چرخش دوربین",
-                            tint = Color.White
-                        )
+                        // 90° manual rotation toggle
+                        IconButton(
+                            onClick = {
+                                manualRotationDegrees = (manualRotationDegrees + 90) % 360
+                            },
+                            modifier = Modifier
+                                .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                                .testTag("rotate_camera_btn")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ScreenRotation,
+                                contentDescription = "چرخش ۹۰ درجه تصویر",
+                                tint = Color.White
+                            )
+                        }
+
+                        // Lens switch (Front / Back)
+                        IconButton(
+                            onClick = {
+                                cameraFacing = if (cameraFacing == CameraSelector.LENS_FACING_BACK) {
+                                    CameraSelector.LENS_FACING_FRONT
+                                } else {
+                                    CameraSelector.LENS_FACING_BACK
+                                }
+                            },
+                            modifier = Modifier
+                                .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                                .testTag("switch_camera_btn")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Cameraswitch,
+                                contentDescription = "چرخش لنز دوربین",
+                                tint = Color.White
+                            )
+                        }
                     }
                 }
 
@@ -464,8 +485,9 @@ fun FaceCaptureCameraView(
 
                                             // Apply rotation matrix
                                             val matrix = Matrix()
-                                            if (rotation != 0) {
-                                                matrix.postRotate(rotation.toFloat())
+                                            val totalRotation = (rotation + manualRotationDegrees) % 360
+                                            if (totalRotation != 0) {
+                                                matrix.postRotate(totalRotation.toFloat())
                                             }
                                             // Mirror front camera captures so they appear naturally
                                             if (cameraFacing == CameraSelector.LENS_FACING_FRONT) {

@@ -22,25 +22,39 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.HourglassTop
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Report
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Warning
+import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.ThumbDown
+import androidx.compose.material.icons.filled.ThumbUp
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import com.example.core.utils.DateTimeUtils
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
+import com.example.domain.model.BehaviorRecord
+import com.example.ui.theme.VazirmatnFontFamily
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -115,27 +129,39 @@ fun ReportsScreen(
     }
     val bothParentsIn = !isParent || (isFatherIn && isMotherIn)
 
-    var selectedGrade by remember { mutableStateOf("همه پایه‌ها") }
-    val grades = listOf("همه پایه‌ها", "پایه هفتم", "پایه هشتم", "پایه نهم")
+    val hiddenReportIds by mainViewModel.hiddenFromReportsRecordIds.collectAsState()
+    var recordToHideInReports by remember { mutableStateOf<BehaviorRecord?>(null) }
 
-    val relevantRecords = if (isParent && parentChild != null) {
-        records.filter { it.studentId == parentChild.id }
-    } else {
-        records
+    val visibleRecords = remember(records, hiddenReportIds) {
+        records.filter { it.id !in hiddenReportIds }
     }
 
-    val filteredRecords = if (selectedGrade == "همه پایه‌ها") relevantRecords else relevantRecords.filter { it.studentGrade == selectedGrade }
+    var selectedClassFilter by remember { mutableStateOf("همه") }
+    val classFilters = listOf("همه", "هفتم یک", "هفتم دو", "هشتم یک", "هشتم دو", "نهم یک", "نهم دو")
 
-    val positiveRecords = filteredRecords.filter { it.type.isPositive }
-    val disciplinaryRecords = filteredRecords.filter { !it.type.isPositive }
+    val relevantRecords = if (isParent && parentChild != null) {
+        visibleRecords.filter { it.studentId == parentChild.id }
+    } else {
+        visibleRecords
+    }
 
-    // Dynamic positive categories grouping
-    val positiveCategoryCounts = positiveRecords.groupingBy { it.category }.eachCount()
-    val totalPos = positiveRecords.size.coerceAtLeast(1)
+    val filteredRecords = if (selectedClassFilter == "همه" || isParent) {
+        relevantRecords
+    } else {
+        relevantRecords.filter { matchesClassFilter(it, selectedClassFilter) }
+    }
 
-    // Dynamic disciplinary categories grouping
-    val disciplinaryCategoryCounts = disciplinaryRecords.groupingBy { it.category }.eachCount()
-    val totalDisc = disciplinaryRecords.size.coerceAtLeast(1)
+    var selectedTypeFilter by remember { mutableStateOf("همه موارد") }
+    val typeFilters = listOf("همه موارد", "رفتارهای مثبت (+)", "موارد انضباطی (-)")
+    var viewingPhotoUrl by remember { mutableStateOf<String?>(null) }
+
+    val displayRecords = remember(filteredRecords, selectedTypeFilter) {
+        when (selectedTypeFilter) {
+            "رفتارهای مثبت (+)" -> filteredRecords.filter { it.type.isPositive }
+            "موارد انضباطی (-)" -> filteredRecords.filter { !it.type.isPositive }
+            else -> filteredRecords
+        }
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -163,12 +189,12 @@ fun ReportsScreen(
             ) {
                 Column {
                     Text(
-                        text = "گزارش‌ها و تحلیل آماری",
+                        text = "گزارش‌ها",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = if (isParent) "کارنامه و پرونده تحلیلی فرزند" else "تحلیل آماری رفتارهای ثبت‌شده",
+                        text = if (isParent) "کارنامه و پرونده تحلیلی فرزند" else "تحلیل و بررسی رفتارهای ثبت‌شده دانش‌آموزان",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -182,10 +208,10 @@ fun ReportsScreen(
                                 if (isParent && parentChild != null) {
                                     appendLine("دانش‌آموز: ${parentChild.fullName} (کد: ${parentChild.studentCode})")
                                 }
-                                appendLine("پایه: $selectedGrade")
+                                appendLine("کلاس/پایه: $selectedClassFilter")
                                 appendLine("تعداد کل رخدادها: ${filteredRecords.size}")
-                                appendLine("رفتارهای مثبت: ${positiveRecords.size}")
-                                appendLine("موارد انضباطی: ${disciplinaryRecords.size}")
+                                appendLine("رفتارهای مثبت: ${filteredRecords.count { it.type.isPositive }}")
+                                appendLine("موارد انضباطی: ${filteredRecords.count { !it.type.isPositive }}")
                             }
                             val sendIntent = Intent().apply {
                                 action = Intent.ACTION_SEND
@@ -436,181 +462,148 @@ fun ReportsScreen(
                 }
             }
 
-            // Grade Filters
+            // Filter Chips: Type Filter
             item {
                 Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
                     Text(
-                        text = "تفکیک بر اساس پایه تحصیلی:",
+                        text = "نوع رفتار:",
                         style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontFamily = VazirmatnFontFamily
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(grades) { g ->
+                        items(typeFilters) { tf ->
                             FilterChip(
-                                selected = selectedGrade == g,
-                                onClick = { selectedGrade = g },
-                                label = { Text(g) }
+                                selected = selectedTypeFilter == tf,
+                                onClick = { selectedTypeFilter = tf },
+                                label = { Text(tf, fontFamily = VazirmatnFontFamily) }
                             )
                         }
                     }
                 }
             }
 
-            // Real Summary Metrics
-            item {
-                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        StatCard(
-                            title = "رفتارهای مثبت",
-                            value = filteredRecords.count { it.type == RecordType.POSITIVE }.toString(),
-                            icon = Icons.Default.CheckCircle,
-                            containerColor = PositiveGreenContainer,
-                            contentColor = OnPositiveGreenContainer,
-                            modifier = Modifier.weight(1f)
-                        )
-                        StatCard(
-                            title = "افتخارات و تشویق‌ها",
-                            value = filteredRecords.count { it.type == RecordType.ACHIEVEMENT || it.type == RecordType.REWARD }.toString(),
-                            icon = Icons.Default.EmojiEvents,
-                            containerColor = WarningAmberContainer,
-                            contentColor = OnWarningAmberContainer,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        StatCard(
-                            title = "تذکرات انضباطی",
-                            value = filteredRecords.count { it.type == RecordType.WARNING }.toString(),
-                            icon = Icons.Default.Warning,
-                            containerColor = WarningAmberContainer.copy(alpha = 0.5f),
-                            contentColor = OnWarningAmberContainer,
-                            modifier = Modifier.weight(1f)
-                        )
-                        StatCard(
-                            title = "موارد و تخلفات",
-                            value = filteredRecords.count { it.type == RecordType.DISCIPLINARY }.toString(),
-                            icon = Icons.Default.Report,
-                            containerColor = IncidentRedContainer,
-                            contentColor = OnIncidentRedContainer,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-            }
-
-            // Dynamic Positive Categories Breakdown
-            item {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 6.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
+            // Grade & Class Filters (For staff)
+            if (!isParent) {
+                item {
+                    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
                         Text(
-                            text = "فراوانی دسته‌بندی رفتارهای مثبت",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = PositiveGreen
+                            text = "تفکیک بر اساس کلاس و پایه:",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontFamily = VazirmatnFontFamily
                         )
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        if (positiveCategoryCounts.isEmpty()) {
-                            Text(
-                                text = "رکوردی ثبت نشده است.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        } else {
-                            positiveCategoryCounts.entries.forEach { (cat, count) ->
-                                val pct = count.toFloat() / totalPos
-                                Column(modifier = Modifier.padding(vertical = 4.dp)) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Text(cat, style = MaterialTheme.typography.bodySmall)
-                                        Text("${count.toPersianDigits()} مورد (${(pct * 100).toInt()}%".toPersianDigits() + ")", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
-                                    }
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    LinearProgressIndicator(
-                                        progress = { pct },
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(6.dp)
-                                            .clip(RoundedCornerShape(3.dp)),
-                                        color = PositiveGreen,
-                                        trackColor = PositiveGreenContainer
-                                    )
-                                }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(classFilters) { cf ->
+                                FilterChip(
+                                    selected = selectedClassFilter == cf,
+                                    onClick = { selectedClassFilter = cf },
+                                    label = { Text(cf, fontFamily = VazirmatnFontFamily) }
+                                )
                             }
                         }
                     }
                 }
             }
 
-            // Dynamic Disciplinary Categories Breakdown
+            // Counter Header Strip
             item {
-                Card(
+                Surface(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 6.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant)
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Text(
-                            text = "فراوانی دسته‌بندی موارد انضباطی و تذکرات",
-                            style = MaterialTheme.typography.titleSmall,
+                            text = "سوابق ثبت‌شده (${displayRecords.size.toPersianDigits()} مورد)",
+                            style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.Bold,
-                            color = IncidentRed
+                            fontFamily = VazirmatnFontFamily
                         )
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        if (disciplinaryCategoryCounts.isEmpty()) {
-                            Text(
-                                text = "مورد انضباطی ثبت نشده است.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        } else {
-                            disciplinaryCategoryCounts.entries.forEach { (cat, count) ->
-                                val pct = count.toFloat() / totalDisc
-                                Column(modifier = Modifier.padding(vertical = 4.dp)) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Text(cat, style = MaterialTheme.typography.bodySmall)
-                                        Text("${count.toPersianDigits()} مورد (${(pct * 100).toInt()}%".toPersianDigits() + ")", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
-                                    }
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    LinearProgressIndicator(
-                                        progress = { pct },
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(6.dp)
-                                            .clip(RoundedCornerShape(3.dp)),
-                                        color = IncidentRed,
-                                        trackColor = IncidentRedContainer
-                                    )
-                                }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Surface(
+                                color = PositiveGreenContainer,
+                                shape = RoundedCornerShape(6.dp)
+                            ) {
+                                Text(
+                                    text = "+${displayRecords.count { it.type.isPositive }.toPersianDigits()} مثبت",
+                                    color = PositiveGreen,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = VazirmatnFontFamily,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                            Surface(
+                                color = IncidentRedContainer,
+                                shape = RoundedCornerShape(6.dp)
+                            ) {
+                                Text(
+                                    text = "-${displayRecords.count { !it.type.isPositive }.toPersianDigits()} انضباطی",
+                                    color = IncidentRed,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = VazirmatnFontFamily,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
                             }
                         }
                     }
+                }
+            }
+
+            // Items List
+            if (displayRecords.isEmpty()) {
+                item {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(32.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Info,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.outline,
+                                modifier = Modifier.size(40.dp)
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = "هیچ سابقه رفتاری یا انضباطی در این بخش ثبت نشده است.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontFamily = VazirmatnFontFamily
+                            )
+                        }
+                    }
+                }
+            } else {
+                items(displayRecords, key = { it.id }) { record ->
+                    BehaviorRecordItemCard(
+                        record = record,
+                        onImageClick = { viewingPhotoUrl = it },
+                        onDeleteClick = { recordToHideInReports = record }
+                    )
                 }
             }
         }
@@ -618,6 +611,323 @@ fun ReportsScreen(
         item {
             Spacer(modifier = Modifier.height(80.dp))
         }
+    }
+
+    if (recordToHideInReports != null) {
+        AlertDialog(
+            onDismissRequest = { recordToHideInReports = null },
+            title = {
+                Text(
+                    text = "حذف گزارش",
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = VazirmatnFontFamily
+                )
+            },
+            text = {
+                Text(
+                    text = "آیا از حذف این گزارش از این بخش اطمینان دارید؟\nاین مورد صرفاً از فهرست گزارش‌ها حذف می‌شود و در پرونده انضباطی دانش‌آموز باقی خواهد ماند.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontFamily = VazirmatnFontFamily,
+                    lineHeight = 22.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        recordToHideInReports?.let { rec ->
+                            mainViewModel.hideRecordFromReports(rec.id)
+                        }
+                        recordToHideInReports = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = IncidentRed)
+                ) {
+                    Text("حذف از گزارش‌ها", fontFamily = VazirmatnFontFamily, color = Color.White)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = { recordToHideInReports = null }
+                ) {
+                    Text("انصراف", fontFamily = VazirmatnFontFamily)
+                }
+            }
+        )
+    }
+
+    if (viewingPhotoUrl != null) {
+        AlertDialog(
+            onDismissRequest = { viewingPhotoUrl = null },
+            confirmButton = {
+                Button(
+                    onClick = { viewingPhotoUrl = null },
+                    colors = ButtonDefaults.buttonColors(containerColor = SchoolBluePrimary)
+                ) {
+                    Text("بستن تصویر", fontFamily = VazirmatnFontFamily)
+                }
+            },
+            text = {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(300.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    AsyncImage(
+                        model = viewingPhotoUrl,
+                        contentDescription = "تصویر پیوست گزارش",
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(12.dp))
+                    )
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun BehaviorRecordItemCard(
+    record: BehaviorRecord,
+    onImageClick: (String) -> Unit,
+    onDeleteClick: () -> Unit
+) {
+    val isPos = record.type.isPositive
+    val cardBorderColor = if (isPos) PositiveGreen.copy(alpha = 0.4f) else IncidentRed.copy(alpha = 0.4f)
+    val accentColor = if (isPos) PositiveGreen else IncidentRed
+    val containerBg = if (isPos) PositiveGreenContainer.copy(alpha = 0.2f) else IncidentRedContainer.copy(alpha = 0.2f)
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp)
+            .testTag("record_card_${record.id}"),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, cardBorderColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.5.dp)
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            // Header: Student Name + Class & Badge Points + Delete from reports
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    modifier = Modifier.weight(1f, fill = false),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(containerBg),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = if (isPos) Icons.Default.ThumbUp else Icons.Default.ThumbDown,
+                            contentDescription = null,
+                            tint = accentColor,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = record.studentName,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = VazirmatnFontFamily
+                        )
+                        Text(
+                            text = "${record.studentGrade} • ${record.studentClass}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontFamily = VazirmatnFontFamily
+                        )
+                    }
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    // Points Badge
+                    record.points?.let { pts ->
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (isPos) PositiveGreenContainer else IncidentRedContainer
+                        ) {
+                            Text(
+                                text = if (isPos) "+${pts.toPersianDigits()} امتیاز" else "-${kotlin.math.abs(pts).toPersianDigits()} امتیاز",
+                                color = accentColor,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = VazirmatnFontFamily,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            )
+                        }
+                    }
+
+                    // Delete from reports button (hides from reports, keeps in student dossier)
+                    IconButton(
+                        onClick = onDeleteClick,
+                        modifier = Modifier
+                            .size(36.dp)
+                            .testTag("delete_report_${record.id}")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "حذف از گزارش‌ها",
+                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Title & Category
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = record.title.ifBlank { record.category },
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = accentColor,
+                    fontFamily = VazirmatnFontFamily
+                )
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant
+                ) {
+                    Text(
+                        text = record.category,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontFamily = VazirmatnFontFamily,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+            }
+
+            if (record.description.isNotBlank()) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = record.description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    lineHeight = 20.sp,
+                    fontFamily = VazirmatnFontFamily
+                )
+            }
+
+            // Attached Photo if exists
+            val photoUrl = record.imageUrl ?: record.attachments.firstOrNull()
+            if (!photoUrl.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(140.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFFF1F5F9))
+                        .clickable { onImageClick(photoUrl) }
+                ) {
+                    AsyncImage(
+                        model = photoUrl,
+                        contentDescription = "تصویر رفتار ثبت شده",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                    Surface(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(8.dp),
+                        shape = RoundedCornerShape(6.dp),
+                        color = Color.Black.copy(alpha = 0.65f)
+                    ) {
+                        Text(
+                            text = "مشاهده بزرگ‌تر 🔍",
+                            color = Color.White,
+                            fontSize = 10.sp,
+                            fontFamily = VazirmatnFontFamily,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Footer: Date & Time (without submitter / createdBy, normalized month based on solar date)
+            val normalizedDate = DateTimeUtils.normalizeReportDate(record.date)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Schedule,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(13.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = "زمان انتشار و ثبت گزارش: $normalizedDate ساعت ${record.time}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontFamily = VazirmatnFontFamily
+                )
+            }
+        }
+    }
+}
+
+private fun matchesClassFilter(record: BehaviorRecord, filter: String): Boolean {
+    if (filter == "همه") return true
+
+    val sGrade = record.studentGrade.lowercase()
+    val sClass = record.studentClass.lowercase()
+    val combined = "$sGrade $sClass"
+
+    return when (filter) {
+        "هفتم یک" -> {
+            combined.contains("هفتم یک") || combined.contains("هفتم ۱") || combined.contains("هفتم 1") ||
+            ((sGrade.contains("هفتم") || sGrade.contains("7") || sGrade.contains("۷")) &&
+             (sClass.contains("7/1") || sClass.contains("۷/۱") || sClass.contains("یک") || sClass.contains("۱") || sClass.contains("/1") || (sClass.contains("1") && !sClass.contains("10") && !sClass.contains("11") && !sClass.contains("12"))))
+        }
+        "هفتم دو" -> {
+            combined.contains("هفتم دو") || combined.contains("هفتم ۲") || combined.contains("هفتم 2") ||
+            ((sGrade.contains("هفتم") || sGrade.contains("7") || sGrade.contains("۷")) &&
+             (sClass.contains("7/2") || sClass.contains("۷/۲") || sClass.contains("دو") || sClass.contains("۲") || sClass.contains("/2") || sClass.contains("2")))
+        }
+        "هشتم یک" -> {
+            combined.contains("هشتم یک") || combined.contains("هشتم ۱") || combined.contains("هشتم 1") ||
+            ((sGrade.contains("هشتم") || sGrade.contains("8") || sGrade.contains("۸")) &&
+             (sClass.contains("8/1") || sClass.contains("۸/۱") || sClass.contains("یک") || sClass.contains("۱") || sClass.contains("/1") || sClass.contains("1")))
+        }
+        "هشتم دو" -> {
+            combined.contains("هشتم دو") || combined.contains("هشتم ۲") || combined.contains("هشتم 2") ||
+            ((sGrade.contains("هشتم") || sGrade.contains("8") || sGrade.contains("۸")) &&
+             (sClass.contains("8/2") || sClass.contains("۸/۲") || sClass.contains("دو") || sClass.contains("۲") || sClass.contains("/2") || sClass.contains("2")))
+        }
+        "نهم یک" -> {
+            combined.contains("نهم یک") || combined.contains("نهم ۱") || combined.contains("نهم 1") ||
+            ((sGrade.contains("نهم") || sGrade.contains("9") || sGrade.contains("۹")) &&
+             (sClass.contains("9/1") || sClass.contains("۹/۱") || sClass.contains("یک") || sClass.contains("۱") || sClass.contains("/1") || sClass.contains("1")))
+        }
+        "نهم دو" -> {
+            combined.contains("نهم دو") || combined.contains("نهم ۲") || combined.contains("نهم 2") ||
+            ((sGrade.contains("نهم") || sGrade.contains("9") || sGrade.contains("۹")) &&
+             (sClass.contains("9/2") || sClass.contains("۹/۲") || sClass.contains("دو") || sClass.contains("۲") || sClass.contains("/2") || sClass.contains("2")))
+        }
+        else -> combined.contains(filter.lowercase())
     }
 }
 

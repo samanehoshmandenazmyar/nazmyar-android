@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.PriorityHigh
 import androidx.compose.material.icons.filled.Report
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.VolunteerActivism
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -97,6 +98,7 @@ fun ManagerDashboardScreen(
     onNavigateToStudents: () -> Unit,
     onNavigateToReports: () -> Unit,
     onNavigateToNotifications: () -> Unit,
+    onNavigateToPrayer: () -> Unit = {},
     onNavigateToRanks: () -> Unit = {},
     onNavigateToPublishUpdate: () -> Unit = {},
     onNavigateToPtaVoting: () -> Unit = {},
@@ -112,6 +114,10 @@ fun ManagerDashboardScreen(
     val allBanners by BannerManager.banners.collectAsState()
     val stats by mainViewModel.stats.collectAsState()
     val records by mainViewModel.records.collectAsState()
+    val hiddenReportIds by mainViewModel.hiddenFromReportsRecordIds.collectAsState()
+    val reportsCount = remember(records, hiddenReportIds) {
+        records.count { it.id !in hiddenReportIds }
+    }
     val notifications by mainViewModel.notifications.collectAsState()
     val unreadNotifs = notifications.count { !it.read }
 
@@ -122,6 +128,7 @@ fun ManagerDashboardScreen(
     val isCreator = user?.isCreator == true
     val canRegisterPos = isCreator || userPerms.contains(RankPermission.REGISTER_POSITIVE)
     val canRegisterDisc = isCreator || userPerms.contains(RankPermission.REGISTER_DISCIPLINARY)
+    val canRegisterPrayer = isCreator || userPerms.contains(RankPermission.REGISTER_PRAYER) || canRegisterPos || canRegisterDisc
     val canViewStudents = isCreator || userPerms.contains(RankPermission.VIEW_STUDENT_PROFILES) || userPerms.contains(RankPermission.EDIT_CLASS_INFO)
     val canViewReports = isCreator || userPerms.contains(RankPermission.VIEW_REPORTS)
 
@@ -397,6 +404,21 @@ fun ManagerDashboardScreen(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
+                QuickActionButton(
+                    title = "ثبت نماز خواندن",
+                    icon = Icons.Default.VolunteerActivism,
+                    containerColor = Color(0xFF0D9488),
+                    contentColor = Color.White,
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = {
+                        if (canRegisterPrayer) onNavigateToPrayer()
+                        else permissionDeniedMessage = "شما مجوز «ثبت نماز خواندن» را ندارید."
+                    },
+                    tag = "quick_prayer_btn"
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -420,9 +442,10 @@ fun ManagerDashboardScreen(
                         containerColor = Color(0xFF475569),
                         contentColor = Color.White,
                         modifier = Modifier.weight(1f),
+                        badgeCount = reportsCount,
                         onClick = {
                             if (canViewReports) onNavigateToReports()
-                            else permissionDeniedMessage = "شما مجوز «مشاهده گزارش‌ها و آمار» را ندارید."
+                            else permissionDeniedMessage = "شما مجوز «مشاهده گزارش‌ها» را ندارید."
                         },
                         tag = "quick_reports_btn"
                     )
@@ -709,6 +732,7 @@ fun QuickActionButton(
     containerColor: Color,
     contentColor: Color,
     modifier: Modifier = Modifier,
+    badgeCount: Int? = null,
     onClick: () -> Unit,
     tag: String
 ) {
@@ -724,7 +748,7 @@ fun QuickActionButton(
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 12.dp),
+                .padding(horizontal = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
         ) {
@@ -734,13 +758,30 @@ fun QuickActionButton(
                 tint = contentColor,
                 modifier = Modifier.size(20.dp)
             )
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(6.dp))
             Text(
                 text = title,
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Bold,
                 color = contentColor
             )
+            if (badgeCount != null && badgeCount > 0) {
+                Spacer(modifier = Modifier.width(6.dp))
+                Surface(
+                    shape = CircleShape,
+                    color = Color.White.copy(alpha = 0.25f)
+                ) {
+                    Text(
+                        text = badgeCount.toPersianDigits(),
+                        color = contentColor,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 11.sp
+                        ),
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+            }
         }
     }
 }

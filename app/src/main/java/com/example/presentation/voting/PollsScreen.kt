@@ -84,6 +84,8 @@ import com.example.R
 import com.example.core.voting.PollsManager
 import com.example.domain.model.Poll
 import com.example.domain.model.PollOption
+import com.example.domain.model.RankPermission
+import com.example.domain.model.User
 import com.example.domain.model.UserRole
 import com.example.domain.model.toPersianDigits
 import com.example.ui.theme.SchoolBlueContainer
@@ -96,6 +98,7 @@ import java.util.UUID
 fun PollsScreen(
     currentUserId: String = "",
     currentUserRole: UserRole = UserRole.STUDENT,
+    currentUser: User? = null,
     onNavigateBack: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -110,6 +113,16 @@ fun PollsScreen(
 
     var showCreateDialog by remember { mutableStateOf(false) }
     var deleteConfirmPollId by remember { mutableStateOf<String?>(null) }
+
+    val canCreatePoll = remember(currentUser) {
+        if (currentUser == null) false
+        else if (currentUser.isCreator) true
+        else {
+            val hasRank = currentUser.hasGoodRank()
+            val hasPerm = currentUser.permissions.contains(RankPermission.CREATE_POLLS)
+            hasRank && hasPerm
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -137,25 +150,27 @@ fun PollsScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = { showCreateDialog = true },
-                containerColor = SchoolBluePrimary,
-                contentColor = Color.White,
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+            if (canCreatePoll) {
+                FloatingActionButton(
+                    onClick = { showCreateDialog = true },
+                    containerColor = SchoolBluePrimary,
+                    contentColor = Color.White,
+                    shape = RoundedCornerShape(16.dp)
                 ) {
-                    Icon(imageVector = Icons.Default.Add, contentDescription = null)
-                    Text(
-                        text = "ایجاد نظرسنجی جدید",
-                        style = MaterialTheme.typography.labelLarge.copy(
-                            fontFamily = VazirmatnFontFamily,
-                            fontWeight = FontWeight.Bold
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.Add, contentDescription = null)
+                        Text(
+                            text = "ایجاد نظرسنجی جدید",
+                            style = MaterialTheme.typography.labelLarge.copy(
+                                fontFamily = VazirmatnFontFamily,
+                                fontWeight = FontWeight.Bold
+                            )
                         )
-                    )
+                    }
                 }
             }
         }

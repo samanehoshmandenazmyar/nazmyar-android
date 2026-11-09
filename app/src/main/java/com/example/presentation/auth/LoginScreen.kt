@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.FamilyRestroom
+import androidx.compose.material.icons.filled.HeadsetMic
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Lock
@@ -76,6 +77,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -101,7 +103,8 @@ import kotlin.random.Random
 @Composable
 fun LoginScreen(
     authViewModel: AuthViewModel,
-    onLoginSuccess: () -> Unit
+    onLoginSuccess: () -> Unit,
+    onNavigateToSupport: () -> Unit = {}
 ) {
     val uiState by authViewModel.uiState.collectAsState()
     val isDark = isAppInDarkTheme()
@@ -202,10 +205,64 @@ fun LoginScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(scrollState)
-                .padding(horizontal = 20.dp, vertical = 20.dp),
+                .padding(horizontal = 20.dp, vertical = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(8.dp))
+            // Top Bar: Support Access Button for Registration and Login
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = SchoolBluePrimary.copy(alpha = if (isDark) 0.22f else 0.1f),
+                    border = BorderStroke(1.dp, SchoolBluePrimary.copy(alpha = 0.35f)),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(20.dp))
+                        .clickable { onNavigateToSupport() }
+                        .testTag("login_top_support_button")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.HeadsetMic,
+                            contentDescription = "پشتیبانی",
+                            tint = SchoolBluePrimary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "پشتیبانی و راهنما",
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontFamily = VazirmatnFontFamily,
+                                fontWeight = FontWeight.Bold,
+                                color = SchoolBluePrimary
+                            )
+                        )
+                    }
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = (if (isDark) Color(0xFF334155) else Color(0xFFE2E8F0)).copy(alpha = 0.6f)
+                ) {
+                    Text(
+                        text = "دبیرستان شهید رجایی",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontFamily = VazirmatnFontFamily,
+                            color = subtitleTextColor
+                        ),
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
 
             // School Logo in Glassmorphic Card Container
             Surface(
@@ -216,14 +273,13 @@ fun LoginScreen(
                 modifier = Modifier.size(92.dp)
             ) {
                 Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(10.dp),
+                    modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
                     Image(
                         painter = painterResource(id = com.example.R.drawable.app_icon),
                         contentDescription = "لوگوی سامانه نظمیار",
+                        contentScale = ContentScale.Crop,
                         modifier = Modifier
                             .fillMaxSize()
                             .clip(RoundedCornerShape(18.dp))
@@ -594,7 +650,7 @@ fun LoginScreen(
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(
-                                        text = "کادر آموزشی",
+                                        text = "کادر و دبیران",
                                         style = MaterialTheme.typography.bodySmall.copy(
                                             fontFamily = VazirmatnFontFamily,
                                             fontWeight = if (isStaff) FontWeight.Bold else FontWeight.Medium,

@@ -105,6 +105,36 @@ class DemoRepositoryImpl :
         }
     }
 
+    private fun sanitizeStaffName(rawName: String, demoUser: User? = null): String {
+        if (demoUser != null && !demoUser.isCreator) {
+            val cleanDemo = demoUser.name
+            val cleanRaw = rawName
+                .replace("دبیر", "")
+                .replace("علوم", "")
+                .replace("ریاضی", "")
+                .replace("مطالعات", "")
+                .replace("تفکر", "")
+                .replace("دفاعی", "")
+                .replace("هنر", "")
+                .replace("عربی", "")
+                .replace("زبان", "")
+                .replace("،", "")
+                .replace(" ", "")
+            val cleanDemoNoSpace = cleanDemo.replace(" ", "")
+            if (rawName.contains("دبیر") || cleanRaw.contains(cleanDemoNoSpace) || cleanDemoNoSpace.contains(cleanRaw)) {
+                return cleanDemo
+            }
+        }
+        var name = rawName.trim()
+        val teacherSuffixIdx = name.indexOf(" دبیر ")
+        if (teacherSuffixIdx > 0) {
+            name = name.substring(0, teacherSuffixIdx).trim()
+        } else if (name.startsWith("دبیر ")) {
+            name = name.substring(5).trim()
+        }
+        return name
+    }
+
     override suspend fun syncWithServer(): Boolean = withContext(Dispatchers.IO) {
         try {
             // Concurrent parallel fetching for lightning-fast real-time synchronization
@@ -228,19 +258,42 @@ class DemoRepositoryImpl :
                         if (base.id == creatorUser.id) creatorUser
                         else {
                             val remote = remoteUsers.firstOrNull { it.id == base.id }
+                            val localMatch = _users.value.firstOrNull { it.id == base.id }
+                            val loggedInSelf = if (_currentUser.value?.id == base.id) _currentUser.value else null
+                            val bestName = if (loggedInSelf != null && loggedInSelf.hasLoggedIn && loggedInSelf.name.isNotBlank()) {
+                                sanitizeStaffName(loggedInSelf.name, base)
+                            } else if (localMatch != null && localMatch.hasLoggedIn && localMatch.name.isNotBlank()) {
+                                sanitizeStaffName(localMatch.name, base)
+                            } else {
+                                base.name
+                            }
                             if (remote != null) {
                                 if (remote.role == UserRole.STUDENT) {
                                     val isInServerStudents = activeServerStudentCodes.contains(remote.studentCode) || activeServerStudentIds.contains(remote.id)
-                                    remote.copy(phone = base.phone, hasLoggedIn = isInServerStudents, isRegisteredUser = isInServerStudents)
+                                    remote.copy(name = bestName, phone = base.phone, hasLoggedIn = isInServerStudents, isRegisteredUser = isInServerStudents)
                                 } else {
-                                    remote.copy(phone = base.phone)
+                                    remote.copy(name = bestName, phone = base.phone)
                                 }
-                            } else base
+                            } else {
+                                val baseUser = localMatch?.takeIf { it.hasLoggedIn } ?: base
+                                baseUser.copy(name = bestName)
+                            }
                         }
                     }
                     val updatedUsers = (baseUsers + remoteUsers.map { r ->
                         val demoMatch = DemoData.demoUsers.firstOrNull { it.id == r.id }
-                        val baseCopy = if (demoMatch != null) r.copy(phone = demoMatch.phone) else r
+                        val localMatch = _users.value.firstOrNull { it.id == r.id }
+                        val loggedInSelf = if (_currentUser.value?.id == r.id) _currentUser.value else null
+                        val effectiveName = if (loggedInSelf != null && loggedInSelf.hasLoggedIn && loggedInSelf.name.isNotBlank()) {
+                            sanitizeStaffName(loggedInSelf.name, demoMatch)
+                        } else if (localMatch != null && localMatch.hasLoggedIn && localMatch.name.isNotBlank()) {
+                            sanitizeStaffName(localMatch.name, demoMatch)
+                        } else if (demoMatch != null) {
+                            demoMatch.name
+                        } else {
+                            sanitizeStaffName(r.name)
+                        }
+                        val baseCopy = if (demoMatch != null) r.copy(name = effectiveName, phone = demoMatch.phone) else r.copy(name = effectiveName)
                         if (r.role == UserRole.STUDENT && r.id != creatorUser.id && r.studentCode != "454545") {
                             val isInServerStudents = activeServerStudentCodes.contains(r.studentCode) || activeServerStudentIds.contains(r.id)
                             baseCopy.copy(hasLoggedIn = isInServerStudents, isRegisteredUser = isInServerStudents)
@@ -253,12 +306,12 @@ class DemoRepositoryImpl :
                         _users.value = updatedUsers
                     }
 
-                    // Push any missing pre-configured staff demo users or updated phone numbers to remote database
+                    // Push missing or updated clean staff names and phone numbers to remote database
                     repoScope.launch {
                         baseUsers.forEach { base ->
                             val remote = remoteUsers.firstOrNull { it.id == base.id }
-                            if (remote == null || remote.phone != base.phone) {
-                                val toSave = remote?.copy(phone = base.phone) ?: base
+                            if (remote == null || remote.phone != base.phone || remote.name != base.name) {
+                                val toSave = remote?.copy(phone = base.phone, name = base.name) ?: base
                                 FirebaseRealtimeService.saveUser(toSave)
                             }
                         }
@@ -303,13 +356,15 @@ class DemoRepositoryImpl :
                                 val newPerms = if (updatedSelf.permissions.isNotEmpty()) updatedSelf.permissions else curr.permissions
                                 val newRank = updatedSelf.rankTitle.ifBlank { curr.rankTitle }
                                 val newColor = updatedSelf.rankColorHex.ifBlank { curr.rankColorHex }
-                                if (curr.role != newRole || curr.rankTitle != newRank || curr.permissions != newPerms) {
+                                val preservedName = curr.name.ifBlank { updatedSelf.name }
+                                if (curr.role != newRole || curr.rankTitle != newRank || curr.permissions != newPerms || curr.name != preservedName) {
                                     val colorIntLong = try {
                                         android.graphics.Color.parseColor(if (newColor.startsWith("#")) newColor else "#$newColor").toLong() and 0xFFFFFFFFL
                                     } catch (_: Exception) {
                                         0xFF64748BL
                                     }
                                     val updatedCurr = curr.copy(
+                                        name = preservedName,
                                         role = newRole,
                                         rankTitle = newRank,
                                         rankColorHex = newColor,
@@ -506,11 +561,23 @@ class DemoRepositoryImpl :
         if (isStaffRole) {
             // Educational Staff Login: Search by name and staff role
             val cleanInput = trimmedName.replace(" ", "")
+            val cleanWithoutPrefixes = cleanInput
+                .replace("استاد", "")
+                .replace("دبیر", "")
+                .replace("آقای", "")
+                .replace("آقا", "")
+                .replace("مهندس", "")
+                .replace("دکتر", "")
+                .replace("حاجی", "")
+                .replace("حاج", "")
+
             val allStaffCandidates = (_users.value + DemoData.demoUsers).distinctBy { it.id }
             user = allStaffCandidates.firstOrNull { u ->
+                val uClean = u.name.replace(" ", "")
                 u.role != UserRole.STUDENT && u.role != UserRole.PARENT && (
-                    u.name.replace(" ", "").equals(cleanInput, ignoreCase = true) ||
+                    uClean.equals(cleanInput, ignoreCase = true) ||
                     u.name.equals(trimmedName, ignoreCase = true) ||
+                    (cleanWithoutPrefixes.length >= 3 && (uClean.contains(cleanWithoutPrefixes) || cleanWithoutPrefixes.contains(uClean))) ||
                     (cleanInput.contains("فاریابی") && u.id == "user_manager_mehdi_faryabi") ||
                     (cleanInput.contains("دوراهکی") && u.id == "user_counselor_yasin_dorahaki") ||
                     (cleanInput.contains("موسوی") && u.isCreator)
@@ -522,15 +589,25 @@ class DemoRepositoryImpl :
                 if (!remoteUsers.isNullOrEmpty()) {
                     _users.value = (remoteUsers + _users.value).distinctBy { it.id }
                     user = _users.value.firstOrNull { u ->
-                        u.role != UserRole.STUDENT && u.role != UserRole.PARENT &&
-                        u.name.replace(" ", "").equals(cleanInput, ignoreCase = true)
+                        val uClean = u.name.replace(" ", "")
+                        u.role != UserRole.STUDENT && u.role != UserRole.PARENT && (
+                            uClean.equals(cleanInput, ignoreCase = true) ||
+                            (cleanWithoutPrefixes.length >= 3 && (uClean.contains(cleanWithoutPrefixes) || cleanWithoutPrefixes.contains(uClean)))
+                        )
                     }
                 }
             }
 
-            // If no existing staff user account found, dynamically create a Manager / Vice Principal staff account
+            // If no existing staff user account found, dynamically create a staff account
             if (user == null) {
-                val newStaffRole = if (role == UserRole.STUDENT || role == UserRole.PARENT) UserRole.MANAGER else role
+                val isTeacherTitle = cleanInput.contains("دبیر") || cleanInput.contains("استاد") || role == UserRole.TEACHER
+                val newStaffRole = if (isTeacherTitle) {
+                    UserRole.TEACHER
+                } else if (role == UserRole.STUDENT || role == UserRole.PARENT) {
+                    UserRole.MANAGER
+                } else {
+                    role
+                }
                 user = User(
                     id = "staff_${UUID.randomUUID()}",
                     name = trimmedName,
@@ -543,12 +620,21 @@ class DemoRepositoryImpl :
                     gender = "آقا",
                     isRegisteredUser = true,
                     hasLoggedIn = true,
-                    rankTitle = newStaffRole.farsiTitle,
-                    rankBadgeColorHex = 0xFF1E40AF,
-                    rankColorHex = "#1E40AF",
-                    permissions = listOf(
+                    rankTitle = if (newStaffRole == UserRole.TEACHER) "دبیر" else newStaffRole.farsiTitle,
+                    rankBadgeColorHex = if (newStaffRole == UserRole.TEACHER) 0xFF0D9488 else 0xFF1E40AF,
+                    rankColorHex = if (newStaffRole == UserRole.TEACHER) "#0D9488" else "#1E40AF",
+                    permissions = if (newStaffRole == UserRole.TEACHER) listOf(
                         RankPermission.REGISTER_POSITIVE,
                         RankPermission.REGISTER_DISCIPLINARY,
+                        RankPermission.REGISTER_PRAYER,
+                        RankPermission.VIEW_REPORTS,
+                        RankPermission.TEACHER_ACCESS,
+                        RankPermission.VIEW_STUDENT_PROFILES,
+                        RankPermission.SPECIAL_BADGE
+                    ) else listOf(
+                        RankPermission.REGISTER_POSITIVE,
+                        RankPermission.REGISTER_DISCIPLINARY,
+                        RankPermission.REGISTER_PRAYER,
                         RankPermission.VIEW_REPORTS,
                         RankPermission.ACCESS_GAMES,
                         RankPermission.VIEW_STUDENT_PROFILES,
@@ -654,6 +740,9 @@ class DemoRepositoryImpl :
             return Result.failure(Exception("رمز عبور وارد شده نادرست است."))
         }
 
+        val demoMatch = DemoData.demoUsers.firstOrNull { it.id == user.id }
+        val finalDisplayName = if (trimmedName.isNotBlank() && !isCreatorLogin) sanitizeStaffName(trimmedName, demoMatch) else user.name
+
         val finalUser = if (isCreatorLogin) {
             user.copy(
                 role = UserRole.MANAGER,
@@ -671,23 +760,25 @@ class DemoRepositoryImpl :
                 id = "parent_${user.studentCode}_${if (isMother) "mom" else "dad"}",
                 name = user.name, // "اسم همون اسم دانش آموز و فرزند خودش باشه"
                 role = UserRole.PARENT,
+                studentCode = user.studentCode,
                 childStudentIds = listOf(user.id),
                 isReadOnly = true,
                 gender = gender,
                 rankTitle = rank,
                 rankBadgeColorHex = 0xFF64748B,
-                rankColorHex = "#64748B"
+                rankColorHex = "#64748B",
+                hasLoggedIn = true,
+                isRegisteredUser = true
             )
 
             _currentUser.value = parentUser
             SessionManager.saveUser(parentUser)
 
             val currentUsersList = _users.value
-            if (!currentUsersList.any { it.id == parentUser.id }) {
-                _users.value = currentUsersList + parentUser
-            }
-            repoScope.launch {
-                FirebaseRealtimeService.saveUser(parentUser)
+            _users.value = if (!currentUsersList.any { it.id == parentUser.id }) {
+                currentUsersList + parentUser
+            } else {
+                currentUsersList.map { if (it.id == parentUser.id) parentUser else it }
             }
 
             // Register parent login in ParentAccessManager and check if both father & mother are logged in
@@ -695,6 +786,11 @@ class DemoRepositoryImpl :
                 studentCode = user.studentCode,
                 isMother = isMother
             )
+
+            repoScope.launch {
+                FirebaseRealtimeService.saveUser(parentUser)
+                FirebaseRealtimeService.recordParentLogin(user.studentCode, isMother, parentUser)
+            }
 
             if (justCompletedBoth) {
                 // Send celebratory notification to both parents and the student
@@ -711,18 +807,21 @@ class DemoRepositoryImpl :
 
             return Result.success(parentUser)
         } else if (user.role == UserRole.MANAGER || user.role == UserRole.COUNSELOR || user.role == UserRole.VICE_PRINCIPAL || user.role == UserRole.TEACHER) {
-            // Keep their staff role and permissions as configured
+            // Keep their staff role and permissions as configured, but adopt the exact display name they logged in with
             user.copy(
+                name = finalDisplayName,
                 isReadOnly = false
             )
         } else {
             user.copy(
+                name = finalDisplayName,
                 role = UserRole.STUDENT,
                 isReadOnly = false
             )
         }
 
         val loggedInUser = finalUser.copy(
+            name = finalDisplayName,
             hasLoggedIn = true,
             isRegisteredUser = true
         )
@@ -730,9 +829,31 @@ class DemoRepositoryImpl :
         _currentUser.value = loggedInUser
         SessionManager.saveUser(loggedInUser)
 
-        // Update in _users list
+        // Update in _users list (matching by ID, studentCode, or clean name)
+        val cleanInput = trimmedName.replace(" ", "")
         _users.value = _users.value.map {
-            if (it.id == loggedInUser.id || (loggedInUser.studentCode.isNotBlank() && it.studentCode == loggedInUser.studentCode)) loggedInUser else it
+            if (it.id == loggedInUser.id || 
+                (loggedInUser.studentCode.isNotBlank() && it.studentCode == loggedInUser.studentCode) ||
+                it.name.replace(" ", "").equals(cleanInput, ignoreCase = true)
+            ) {
+                loggedInUser
+            } else it
+        }
+        if (_users.value.none { it.id == loggedInUser.id }) {
+            _users.value = listOf(loggedInUser) + _users.value
+        }
+
+        // If teacher logged in, also update their display name across any assigned classes
+        if (loggedInUser.role == UserRole.TEACHER || loggedInUser.rankTitle == "دبیر") {
+            _classes.value = _classes.value.map { c ->
+                if (c.teacherId == loggedInUser.id || 
+                    loggedInUser.assignedClasses.contains(c.name) || 
+                    loggedInUser.assignedClasses.contains(c.id) ||
+                    c.teacherName.replace(" ", "").equals(cleanInput, ignoreCase = true)
+                ) {
+                    c.copy(teacherName = loggedInUser.name, teacherId = loggedInUser.id)
+                } else c
+            }
         }
 
         // Update in _students list
@@ -1496,8 +1617,17 @@ class DemoRepositoryImpl :
 
                 when (record.type) {
                     RecordType.POSITIVE -> {
-                        pos++
-                        score += (record.points ?: 5)
+                        if (record.category == "نماز و فرائض دینی") {
+                            val pts = record.points ?: 0
+                            if (pts > 0) {
+                                pos += pts
+                                score += (pts * 5)
+                            }
+                            // if pts == 0: neutral, no changes
+                        } else {
+                            pos++
+                            score += (record.points ?: 5)
+                        }
                     }
                     RecordType.ACHIEVEMENT -> {
                         ach++
@@ -1512,8 +1642,16 @@ class DemoRepositoryImpl :
                         score -= 2
                     }
                     RecordType.DISCIPLINARY -> {
-                        dsc++
-                        score -= (record.points?.let { -it } ?: 5)
+                        if (record.category == "نماز و فرائض دینی") {
+                            val pts = kotlin.math.abs(record.points ?: 0)
+                            if (pts > 0) {
+                                dsc += pts
+                                score -= (pts * 5)
+                            }
+                        } else {
+                            dsc++
+                            score -= (record.points?.let { -it } ?: 5)
+                        }
                     }
                 }
                 student.copy(

@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.HeadsetMic
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
@@ -40,6 +41,7 @@ import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.outlined.Assessment
 import androidx.compose.material.icons.outlined.Face
 import androidx.compose.material.icons.outlined.Group
+import androidx.compose.material.icons.outlined.HeadsetMic
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Person
@@ -93,6 +95,8 @@ import com.example.presentation.admin.PublishAppUpdateScreen
 import com.example.presentation.auth.LoginScreen
 import com.example.presentation.behavior.RegisterDisciplinaryScreen
 import com.example.presentation.behavior.RegisterPositiveScreen
+import com.example.presentation.behavior.RegisterPrayerScreen
+import androidx.compose.material.icons.filled.VolunteerActivism
 import com.example.presentation.dashboard.ManagerDashboardScreen
 import com.example.presentation.dashboard.ParentDashboardScreen
 import com.example.presentation.dashboard.StudentDashboardScreen
@@ -171,7 +175,16 @@ sealed class Screen(
         fun createRoute(studentId: String = "", isLocked: Boolean = false) =
             "register_disciplinary?studentId=$studentId&isLocked=$isLocked"
     }
-    data object Reports : Screen("reports", "گزارش‌ها و آمار", Icons.Default.Assessment, Icons.Outlined.Assessment)
+    data object RegisterPrayer : Screen(
+        "register_prayer?studentId={studentId}",
+        "ثبت نماز خواندن",
+        Icons.Default.VolunteerActivism,
+        Icons.Default.VolunteerActivism
+    ) {
+        fun createRoute(studentId: String = "") =
+            if (studentId.isBlank()) "register_prayer" else "register_prayer?studentId=$studentId"
+    }
+    data object Reports : Screen("reports", "گزارش‌ها", Icons.Default.Assessment, Icons.Outlined.Assessment)
     data object Notifications : Screen("notifications", "اعلان‌ها", Icons.Default.Notifications, Icons.Outlined.Notifications)
     data object Profile : Screen("profile", "پروفایل", Icons.Default.Person, Icons.Outlined.Person)
     data object RankManagement : Screen("rank_management", "مدیریت رنک‌ها", Icons.Default.Security, Icons.Outlined.Security)
@@ -191,6 +204,7 @@ sealed class Screen(
     data object FaceEnrollment : Screen("face_enrollment", "مرکز ثبت چهره دانش‌آموزان", Icons.Default.Face, Icons.Outlined.Face)
     data object FaceRegistrationGate : Screen("face_registration_gate", "ثبت چهره دانش‌آموز", Icons.Default.Face, Icons.Outlined.Face)
     data object ReportCard : Screen("report_card", "دریافت کارنامه", Icons.Default.Description, Icons.Outlined.Description)
+    data object Support : Screen("support", "پشتیبانی", Icons.Default.HeadsetMic, Icons.Outlined.HeadsetMic)
 }
 
 @Composable
@@ -199,9 +213,39 @@ fun AppNavigation(
     mainViewModel: MainViewModel
 ) {
     val currentUser by authViewModel.currentUser.collectAsState()
+    val allStudents by mainViewModel.students.collectAsState()
     val notifications by mainViewModel.notifications.collectAsState()
     val unreadNotifs = notifications.count {
         !it.read && (currentUser?.role != UserRole.PARENT || it.recipientUserId == currentUser?.id)
+    }
+
+    val allRecords by mainViewModel.records.collectAsState()
+    val hiddenReportIds by mainViewModel.hiddenFromReportsRecordIds.collectAsState()
+    val reportsCount = remember(allRecords, hiddenReportIds, currentUser, allStudents) {
+        val visible = allRecords.filter { it.id !in hiddenReportIds }
+        if (currentUser?.role == UserRole.PARENT) {
+            val parentChild = allStudents.firstOrNull { s ->
+                currentUser?.childStudentIds?.contains(s.id) == true || s.studentCode == currentUser?.studentCode
+            }
+            if (parentChild != null) {
+                visible.count { it.studentId == parentChild.id }
+            } else {
+                visible.size
+            }
+        } else {
+            visible.size
+        }
+    }
+
+    val context = LocalContext.current
+    LaunchedEffect(Unit) {
+        com.example.core.support.SupportManager.init(context)
+    }
+    val supportTickets by com.example.core.support.SupportManager.tickets.collectAsState()
+    val unreadSupportCount = if (currentUser?.isSupportStaff == true) {
+        supportTickets.count { it.unreadBySupport }
+    } else {
+        supportTickets.filter { it.userId == currentUser?.id || (currentUser?.phone?.isNotBlank() == true && it.userPhoneOrCode == currentUser?.phone) }.count { it.unreadByUser }
     }
 
     val navController = rememberNavController()
@@ -224,7 +268,6 @@ fun AppNavigation(
         coroutineScope.launch { drawerState.close() }
     }
 
-    val context = LocalContext.current
     val notifPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { _ -> }
@@ -275,6 +318,7 @@ fun AppNavigation(
                 items.add(Screen.Reports)
             }
             items.add(Screen.Notifications)
+            items.add(Screen.Support)
             items.add(Screen.Profile)
             items
         }
@@ -285,6 +329,7 @@ fun AppNavigation(
             Screen.Games,
             Screen.Reports,
             Screen.Notifications,
+            Screen.Support,
             Screen.Profile
         )
         else -> {
@@ -314,6 +359,7 @@ fun AppNavigation(
                 }
             }
             items.add(Screen.Notifications)
+            items.add(Screen.Support)
             items.add(Screen.Profile)
             items
         }
@@ -993,7 +1039,7 @@ fun AppNavigation(
                         )
                     }
 
-                    // 8. گزارش‌ها و آمار
+                    // 8. گزارش‌ها
                     val canViewReports = currentUser?.isCreator == true ||
                         currentUser?.role == UserRole.MANAGER ||
                         currentUser?.role == UserRole.VICE_PRINCIPAL ||
@@ -1016,18 +1062,33 @@ fun AppNavigation(
                             icon = {
                                 Icon(
                                     imageVector = if (isReportsSelected) Icons.Default.Assessment else Icons.Outlined.Assessment,
-                                    contentDescription = "گزارش‌ها و آمار",
+                                    contentDescription = "گزارش‌ها",
                                     modifier = Modifier.size(22.dp)
                                 )
                             },
                             label = {
                                 Text(
-                                    text = "گزارش‌ها و آمار",
+                                    text = "گزارش‌ها",
                                     style = MaterialTheme.typography.bodyMedium.copy(
                                         fontFamily = VazirmatnFontFamily,
                                         fontWeight = if (isReportsSelected) FontWeight.Bold else FontWeight.Normal
                                     )
                                 )
+                            },
+                            badge = {
+                                if (reportsCount > 0) {
+                                    Badge(containerColor = SchoolBluePrimary) {
+                                        Text(
+                                            text = reportsCount.toPersianDigits(),
+                                            color = Color.White,
+                                            fontSize = 11.sp,
+                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                fontFamily = VazirmatnFontFamily,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        )
+                                    }
+                                }
                             },
                             colors = NavigationDrawerItemDefaults.colors(
                                 selectedContainerColor = SchoolBluePrimary.copy(alpha = 0.12f),
@@ -1139,7 +1200,63 @@ fun AppNavigation(
                             .testTag("drawer_item_notifications")
                     )
 
-                    // 10. پروفایل
+                    // 10. پشتیبانی
+                    val isSupportSelected = currentRoute == Screen.Support.route
+                    NavigationDrawerItem(
+                        selected = isSupportSelected,
+                        onClick = {
+                            closeDrawer()
+                            if (currentRoute != Screen.Support.route) {
+                                navController.navigate(Screen.Support.route) {
+                                    popUpTo(Screen.Home.route) { inclusive = false }
+                                    launchSingleTop = true
+                                }
+                            }
+                        },
+                        icon = {
+                            Icon(
+                                imageVector = if (isSupportSelected) Icons.Default.HeadsetMic else Icons.Outlined.HeadsetMic,
+                                contentDescription = "پشتیبانی",
+                                modifier = Modifier.size(22.dp)
+                            )
+                        },
+                        label = {
+                            Text(
+                                text = "پشتیبانی",
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontFamily = VazirmatnFontFamily,
+                                    fontWeight = if (isSupportSelected) FontWeight.Bold else FontWeight.Normal
+                                )
+                            )
+                        },
+                        badge = {
+                            if (unreadSupportCount > 0) {
+                                Badge(containerColor = IncidentRed) {
+                                    Text(
+                                        text = unreadSupportCount.toPersianDigits(),
+                                        color = Color.White,
+                                        fontSize = 11.sp,
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontFamily = VazirmatnFontFamily,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    )
+                                }
+                            }
+                        },
+                        colors = NavigationDrawerItemDefaults.colors(
+                            selectedContainerColor = SchoolBluePrimary.copy(alpha = 0.12f),
+                            selectedIconColor = SchoolBluePrimary,
+                            selectedTextColor = SchoolBluePrimary,
+                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .padding(horizontal = 12.dp, vertical = 2.dp)
+                            .testTag("drawer_item_support")
+                    )
+
+                    // 11. پروفایل
                     val isProfileSelected = currentRoute == Screen.Profile.route
                     NavigationDrawerItem(
                         selected = isProfileSelected,
@@ -1187,7 +1304,12 @@ fun AppNavigation(
                     val canRegisterDisc = currentUser?.isCreator == true ||
                             userPerms.contains(RankPermission.REGISTER_DISCIPLINARY)
 
-                    if (canRegisterPos || canRegisterDisc) {
+                    val canRegisterPrayer = currentUser?.isCreator == true ||
+                            userPerms.contains(RankPermission.REGISTER_PRAYER) ||
+                            canRegisterPos ||
+                            canRegisterDisc
+
+                    if (canRegisterPos || canRegisterDisc || canRegisterPrayer) {
                         HorizontalDivider(
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
                             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
@@ -1274,6 +1396,44 @@ fun AppNavigation(
                                 modifier = Modifier
                                     .padding(horizontal = 12.dp, vertical = 3.dp)
                                     .testTag("drawer_quick_disciplinary")
+                            )
+                        }
+
+                        if (canRegisterPrayer) {
+                            val isPrayerSelected = currentRoute == Screen.RegisterPrayer.route
+                            NavigationDrawerItem(
+                                selected = isPrayerSelected,
+                                onClick = {
+                                    closeDrawer()
+                                    navController.navigate(Screen.RegisterPrayer.route)
+                                },
+                                icon = {
+                                    Icon(
+                                        imageVector = Icons.Default.VolunteerActivism,
+                                        contentDescription = "ثبت نماز خواندن",
+                                        tint = Color(0xFF0D9488),
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                },
+                                label = {
+                                    Text(
+                                        text = "ثبت نماز خواندن",
+                                        style = MaterialTheme.typography.bodyMedium.copy(
+                                            fontFamily = VazirmatnFontFamily,
+                                            fontWeight = if (isPrayerSelected) FontWeight.Bold else FontWeight.Light
+                                        )
+                                    )
+                                },
+                                colors = NavigationDrawerItemDefaults.colors(
+                                    selectedContainerColor = Color(0xFF0D9488).copy(alpha = 0.12f),
+                                    selectedIconColor = Color(0xFF0D9488),
+                                    selectedTextColor = Color(0xFF0D9488),
+                                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                ),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier
+                                    .padding(horizontal = 12.dp, vertical = 3.dp)
+                                    .testTag("drawer_quick_prayer")
                             )
                         }
                     }
@@ -1448,6 +1608,9 @@ fun AppNavigation(
                             navController.navigate(Screen.Home.route) {
                                 popUpTo(Screen.Login.route) { inclusive = true }
                             }
+                        },
+                        onNavigateToSupport = {
+                            navController.navigate(Screen.Support.route)
                         }
                     )
                 }
@@ -1480,6 +1643,7 @@ fun AppNavigation(
                             mainViewModel = mainViewModel,
                             onNavigateToPositive = { navController.navigate(Screen.RegisterPositive.route) },
                             onNavigateToDisciplinary = { navController.navigate(Screen.RegisterDisciplinary.route) },
+                            onNavigateToPrayer = { navController.navigate(Screen.RegisterPrayer.route) },
                             onNavigateToStudents = { navController.navigate(Screen.Students.route) },
                             onNavigateToNotifications = { navController.navigate(Screen.Notifications.route) },
                             onNavigateToPtaVoting = { navController.navigate(Screen.PtaVoting.route) },
@@ -1492,6 +1656,7 @@ fun AppNavigation(
                             mainViewModel = mainViewModel,
                             onNavigateToPositive = { navController.navigate(Screen.RegisterPositive.route) },
                             onNavigateToDisciplinary = { navController.navigate(Screen.RegisterDisciplinary.route) },
+                            onNavigateToPrayer = { navController.navigate(Screen.RegisterPrayer.route) },
                             onNavigateToStudents = { navController.navigate(Screen.Students.route) },
                             onNavigateToReports = { navController.navigate(Screen.Reports.route) },
                             onNavigateToNotifications = { navController.navigate(Screen.Notifications.route) },
@@ -1639,6 +1804,22 @@ fun AppNavigation(
                     )
                 }
 
+                composable(
+                    route = Screen.RegisterPrayer.route,
+                    arguments = listOf(
+                        navArgument("studentId") { type = NavType.StringType; defaultValue = "" }
+                    )
+                ) { backStackEntry ->
+                    val studentId = backStackEntry.arguments?.getString("studentId").orEmpty()
+                    BackHandler { navController.popBackStack() }
+                    RegisterPrayerScreen(
+                        initialStudentId = studentId.ifBlank { null },
+                        mainViewModel = mainViewModel,
+                        authViewModel = authViewModel,
+                        onBackClick = { navController.popBackStack() }
+                    )
+                }
+
                 composable(Screen.Reports.route) {
                     ReportsScreen(
                         user = currentUser,
@@ -1713,6 +1894,7 @@ fun AppNavigation(
                     PollsScreen(
                         currentUserId = currentUser?.id ?: "",
                         currentUserRole = currentUser?.role ?: UserRole.STUDENT,
+                        currentUser = currentUser,
                         onNavigateBack = { navController.popBackStack() }
                     )
                 }
@@ -1722,6 +1904,7 @@ fun AppNavigation(
                     PollsScreen(
                         currentUserId = currentUser?.id ?: "",
                         currentUserRole = currentUser?.role ?: UserRole.STUDENT,
+                        currentUser = currentUser,
                         onNavigateBack = { navController.popBackStack() }
                     )
                 }
@@ -1813,6 +1996,15 @@ fun AppNavigation(
                                 popUpTo(Screen.FaceRegistrationGate.route) { inclusive = true }
                             }
                         }
+                    )
+                }
+
+                composable(Screen.Support.route) {
+                    BackHandler { navController.popBackStack() }
+                    com.example.presentation.support.SupportScreen(
+                        user = currentUser,
+                        allStudents = allStudents,
+                        onBackClick = { navController.popBackStack() }
                     )
                 }
             }

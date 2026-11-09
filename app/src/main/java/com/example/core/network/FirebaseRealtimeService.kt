@@ -6,10 +6,13 @@ import com.example.domain.model.BehaviorRecord
 import com.example.domain.model.CustomRank
 import com.example.domain.model.HomeBanner
 import com.example.domain.model.RecordType
+import com.example.domain.model.PrayerLock
 import com.example.domain.model.ReportCard
 import com.example.domain.model.SeverityLevel
 import com.example.domain.model.Student
 import com.example.domain.model.SubjectGrade
+import com.example.domain.model.SupportMessage
+import com.example.domain.model.SupportTicket
 import com.example.domain.model.User
 import com.example.domain.model.UserRole
 import com.example.domain.model.toStudent
@@ -231,6 +234,26 @@ object FirebaseRealtimeService {
         }
 
         success
+    }
+
+    suspend fun recordParentLogin(studentCode: String, isMother: Boolean, parentUser: User): Boolean = withContext(Dispatchers.IO) {
+        val relationKey = if (isMother) "mom" else "dad"
+        val json = JSONObject().apply {
+            put("studentCode", studentCode)
+            put("relation", if (isMother) "مادر" else "پدر")
+            put("parentId", parentUser.id)
+            put("parentName", parentUser.name)
+            put("hasLoggedIn", true)
+            put("loggedInAt", System.currentTimeMillis())
+        }
+        val body = json.toString().toRequestBody(JSON_MEDIA_TYPE)
+        executeWriteWithFailover("recordParentLogin") { baseUrl ->
+            val req = Request.Builder()
+                .url("$baseUrl/parent_logins/$studentCode/$relationKey.json")
+                .put(body)
+                .build()
+            client.newCall(req).execute().use { it.isSuccessful }
+        }
     }
 
     suspend fun deleteUser(userId: String): Boolean = withContext(Dispatchers.IO) {
@@ -1323,6 +1346,210 @@ object FirebaseRealtimeService {
                 .delete()
                 .build()
             client.newCall(request).execute().use { it.isSuccessful }
+        }
+    }
+
+    suspend fun fetchSupportTickets(): List<SupportTicket>? = withContext(Dispatchers.IO) {
+        executeWithFailover<List<SupportTicket>>("fetchSupportTickets") { baseUrl ->
+            val request = Request.Builder()
+                .url("$baseUrl/support_tickets.json")
+                .get()
+                .build()
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return@executeWithFailover null
+                val body = response.body?.string() ?: return@executeWithFailover null
+                if (body == "null" || body.isBlank()) return@executeWithFailover emptyList<SupportTicket>()
+                val list = mutableListOf<SupportTicket>()
+                if (body.trim().startsWith("{")) {
+                    val root = JSONObject(body)
+                    val keys = root.keys()
+                    while (keys.hasNext()) {
+                        val key = keys.next()
+                        val obj = root.optJSONObject(key) ?: continue
+                        list.add(parseSupportTicketJson(obj))
+                    }
+                } else if (body.trim().startsWith("[")) {
+                    val arr = JSONArray(body)
+                    for (i in 0 until arr.length()) {
+                        if (!arr.isNull(i)) {
+                            list.add(parseSupportTicketJson(arr.getJSONObject(i)))
+                        }
+                    }
+                }
+                list
+            }
+        }
+    }
+
+    suspend fun saveSupportTicket(ticket: SupportTicket): Boolean = withContext(Dispatchers.IO) {
+        val json = JSONObject().apply {
+            put("id", ticket.id)
+            put("userId", ticket.userId)
+            put("userName", ticket.userName)
+            put("userPhoneOrCode", ticket.userPhoneOrCode)
+            put("userRoleTitle", ticket.userRoleTitle)
+            put("schoolName", ticket.schoolName)
+            put("status", ticket.status)
+            put("lastMessage", ticket.lastMessage)
+            put("lastUpdated", ticket.lastUpdated)
+            put("unreadBySupport", ticket.unreadBySupport)
+            put("unreadByUser", ticket.unreadByUser)
+            put("isStarted", ticket.isStarted)
+
+            val msgsArr = JSONArray()
+            ticket.messages.forEach { m ->
+                msgsArr.put(JSONObject().apply {
+                    put("id", m.id)
+                    put("ticketId", m.ticketId)
+                    put("senderUserId", m.senderUserId)
+                    put("senderName", m.senderName)
+                    put("senderRoleTitle", m.senderRoleTitle)
+                    put("isFromSupport", m.isFromSupport)
+                    put("content", m.content)
+                    put("timestamp", m.timestamp)
+                    if (m.replyToId != null) put("replyToId", m.replyToId)
+                    if (m.replyToSenderName != null) put("replyToSenderName", m.replyToSenderName)
+                    if (m.replyToContent != null) put("replyToContent", m.replyToContent)
+                    put("isEdited", m.isEdited)
+                })
+            }
+            put("messages", msgsArr)
+        }
+
+        val body = json.toString().toRequestBody(JSON_MEDIA_TYPE)
+        val ticketId = if (ticket.id.isNotBlank()) ticket.id else "ticket_${ticket.userId}"
+        executeWriteWithFailover("saveSupportTicket") { baseUrl ->
+            val request = Request.Builder()
+                .url("$baseUrl/support_tickets/$ticketId.json")
+                .put(body)
+                .build()
+            client.newCall(request).execute().use { it.isSuccessful }
+        }
+    }
+
+    suspend fun deleteSupportTicket(ticketId: String): Boolean = withContext(Dispatchers.IO) {
+        executeWriteWithFailover("deleteSupportTicket") { baseUrl ->
+            val request = Request.Builder()
+                .url("$baseUrl/support_tickets/$ticketId.json")
+                .delete()
+                .build()
+            client.newCall(request).execute().use { it.isSuccessful }
+        }
+    }
+
+    private fun parseSupportTicketJson(obj: JSONObject): SupportTicket {
+        val msgsArray = obj.optJSONArray("messages") ?: JSONArray()
+        val msgList = mutableListOf<SupportMessage>()
+        for (j in 0 until msgsArray.length()) {
+            if (!msgsArray.isNull(j)) {
+                val mObj = msgsArray.getJSONObject(j)
+                msgList.add(
+                    SupportMessage(
+                        id = mObj.optString("id", ""),
+                        ticketId = mObj.optString("ticketId", obj.optString("id")),
+                        senderUserId = mObj.optString("senderUserId", ""),
+                        senderName = mObj.optString("senderName", ""),
+                        senderRoleTitle = mObj.optString("senderRoleTitle", ""),
+                        isFromSupport = mObj.optBoolean("isFromSupport", false),
+                        content = mObj.optString("content", ""),
+                        timestamp = mObj.optLong("timestamp", System.currentTimeMillis()),
+                        replyToId = if (mObj.has("replyToId") && !mObj.isNull("replyToId")) mObj.optString("replyToId") else null,
+                        replyToSenderName = if (mObj.has("replyToSenderName") && !mObj.isNull("replyToSenderName")) mObj.optString("replyToSenderName") else null,
+                        replyToContent = if (mObj.has("replyToContent") && !mObj.isNull("replyToContent")) mObj.optString("replyToContent") else null,
+                        isEdited = mObj.optBoolean("isEdited", false)
+                    )
+                )
+            }
+        }
+
+        return SupportTicket(
+            id = obj.optString("id", ""),
+            userId = obj.optString("userId", ""),
+            userName = obj.optString("userName", ""),
+            userPhoneOrCode = obj.optString("userPhoneOrCode", ""),
+            userRoleTitle = obj.optString("userRoleTitle", ""),
+            schoolName = obj.optString("schoolName", "دبیرستان شهید رجایی"),
+            status = obj.optString("status", "ACTIVE"),
+            lastMessage = obj.optString("lastMessage", ""),
+            lastUpdated = obj.optLong("lastUpdated", System.currentTimeMillis()),
+            unreadBySupport = obj.optBoolean("unreadBySupport", false),
+            unreadByUser = obj.optBoolean("unreadByUser", false),
+            isStarted = obj.optBoolean("isStarted", false),
+            messages = msgList
+        )
+    }
+
+    suspend fun savePrayerLock(lock: PrayerLock): Boolean = withContext(Dispatchers.IO) {
+        val json = JSONObject().apply {
+            put("id", lock.id)
+            put("date", lock.date)
+            put("prayerTime", lock.prayerTime)
+            put("isLocked", lock.isLocked)
+            put("lockedBy", lock.lockedBy)
+            put("lockedAt", lock.lockedAt)
+        }
+        val body = json.toString().toRequestBody(JSON_MEDIA_TYPE)
+
+        executeWriteWithFailover("savePrayerLock") { baseUrl ->
+            val request = Request.Builder()
+                .url(ServerConfig.prayerLockItemUrl(lock.id, baseUrl))
+                .put(body)
+                .build()
+            client.newCall(request).execute().use { it.isSuccessful }
+        } ?: false
+    }
+
+    suspend fun deletePrayerLock(lockId: String): Boolean = withContext(Dispatchers.IO) {
+        executeWriteWithFailover("deletePrayerLock") { baseUrl ->
+            val request = Request.Builder()
+                .url(ServerConfig.prayerLockItemUrl(lockId, baseUrl))
+                .delete()
+                .build()
+            client.newCall(request).execute().use { it.isSuccessful }
+        } ?: false
+    }
+
+    suspend fun fetchPrayerLocks(): List<PrayerLock>? = withContext(Dispatchers.IO) {
+        executeWithFailover("fetchPrayerLocks") { baseUrl ->
+            val request = Request.Builder()
+                .url(ServerConfig.prayerLocksUrl(baseUrl))
+                .get()
+                .build()
+            client.newCall(request).execute().use { resp ->
+                if (!resp.isSuccessful) return@use null
+                val body = resp.body?.string() ?: return@use emptyList()
+                parsePrayerLocksJson(body)
+            }
+        }
+    }
+
+    private fun parsePrayerLocksJson(body: String): List<PrayerLock> {
+        val list = mutableListOf<PrayerLock>()
+        if (body.isBlank() || body == "null") return list
+        try {
+            val root = JSONObject(body)
+            val keys = root.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                val obj = root.optJSONObject(key) ?: continue
+                parseSinglePrayerLock(key, obj)?.let { list.add(it) }
+            }
+        } catch (_: Exception) {}
+        return list
+    }
+
+    private fun parseSinglePrayerLock(key: String, obj: JSONObject): PrayerLock? {
+        return try {
+            PrayerLock(
+                id = obj.optString("id", key),
+                date = obj.optString("date", ""),
+                prayerTime = obj.optString("prayerTime", ""),
+                isLocked = obj.optBoolean("isLocked", true),
+                lockedBy = obj.optString("lockedBy", ""),
+                lockedAt = obj.optLong("lockedAt", System.currentTimeMillis())
+            )
+        } catch (_: Exception) {
+            null
         }
     }
 }

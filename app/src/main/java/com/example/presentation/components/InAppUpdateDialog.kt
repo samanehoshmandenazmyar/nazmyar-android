@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -429,15 +430,24 @@ fun InAppUpdateDialog(
                     Surface(
                         shape = RoundedCornerShape(10.dp),
                         color = Color(0xFFF1F5F9),
-                        modifier = Modifier.fillMaxWidth()
+                        border = BorderStroke(0.5.dp, Color(0xFFCBD5E1)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 140.dp)
                     ) {
-                        Text(
-                            text = notes,
-                            style = MaterialTheme.typography.bodySmall.copy(fontFamily = VazirmatnFontFamily),
-                            color = Color(0xFF334155),
-                            lineHeight = 22.sp,
-                            modifier = Modifier.padding(12.dp)
-                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .verticalScroll(rememberScrollState())
+                                .padding(12.dp)
+                        ) {
+                            Text(
+                                text = notes,
+                                style = MaterialTheme.typography.bodySmall.copy(fontFamily = VazirmatnFontFamily),
+                                color = Color(0xFF334155),
+                                lineHeight = 22.sp
+                            )
+                        }
                     }
                     Spacer(modifier = Modifier.height(10.dp))
                 }

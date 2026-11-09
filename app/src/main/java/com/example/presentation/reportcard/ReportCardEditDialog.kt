@@ -18,11 +18,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
@@ -80,6 +83,28 @@ fun ReportCardEditDialog(
     onSaved: (ReportCard) -> Unit
 ) {
     val context = LocalContext.current
+
+    var reportCardImageUrl by remember { mutableStateOf(initialCard?.reportCardImageUrl) }
+
+    val dialogImagePicker = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.GetContent()
+    ) { uri: android.net.Uri? ->
+        uri?.let {
+            try {
+                val inputStream = context.contentResolver.openInputStream(it)
+                val bitmap = android.graphics.BitmapFactory.decodeStream(inputStream)
+                if (bitmap != null) {
+                    val stream = java.io.ByteArrayOutputStream()
+                    bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, stream)
+                    val base64 = "data:image/jpeg;base64," + android.util.Base64.encodeToString(stream.toByteArray(), android.util.Base64.NO_WRAP)
+                    reportCardImageUrl = base64
+                    Toast.makeText(context, "تصویر کارنامه با موفقیت ثبت شد", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                Toast.makeText(context, "خطا در بارگذاری تصویر: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
     // Card Type State: "TERM" or "MONTHLY"
     var cardType by remember { mutableStateOf(initialCard?.cardType ?: "MONTHLY") }
@@ -289,6 +314,82 @@ fun ReportCardEditDialog(
                         .fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
+                    // Image Upload Card
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Default.Image,
+                                            contentDescription = null,
+                                            tint = SchoolBluePrimary,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = "تصویر و عکس کارنامه (آپلود مستقیم):",
+                                            style = MaterialTheme.typography.labelLarge,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+
+                                if (!reportCardImageUrl.isNullOrBlank()) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(200.dp)
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(Color.Black.copy(alpha = 0.05f))
+                                    ) {
+                                        coil.compose.AsyncImage(
+                                            model = reportCardImageUrl,
+                                            contentDescription = "پیش‌نمایش عکس کارنامه",
+                                            modifier = Modifier.fillMaxSize(),
+                                            contentScale = androidx.compose.ui.layout.ContentScale.Fit
+                                        )
+                                        IconButton(
+                                            onClick = { reportCardImageUrl = null },
+                                            modifier = Modifier
+                                                .align(Alignment.TopEnd)
+                                                .padding(6.dp)
+                                                .background(Color.Red.copy(alpha = 0.85f), CircleShape)
+                                                .size(28.dp)
+                                        ) {
+                                            Icon(Icons.Default.Close, contentDescription = "حذف عکس", tint = Color.White, modifier = Modifier.size(16.dp))
+                                        }
+                                    }
+                                }
+
+                                Button(
+                                    onClick = { dialogImagePicker.launch("image/*") },
+                                    colors = ButtonDefaults.buttonColors(containerColor = SchoolBluePrimary),
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Icon(Icons.Default.AddPhotoAlternate, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = if (reportCardImageUrl.isNullOrBlank()) "انتخاب و آپلود تصویر کارنامه از دستگاه" else "تغییر و آپلود تصویر جدید",
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     // 1. Report Card Type Selector (ماهانه vs ترم/سالیانه)
                     item {
                         Card(
@@ -834,7 +935,8 @@ fun ReportCardEditDialog(
                             highestClassGpa = highestClassGpa,
                             monthlyStudentGpa = monthlyStudentGpa,
                             lowestClassGpa = lowestClassGpa,
-                            overallClassRank = overallClassRank
+                            overallClassRank = overallClassRank,
+                            reportCardImageUrl = reportCardImageUrl
                         )
 
                         val success = ReportCardManager.saveReportCard(cardToSave)

@@ -22,6 +22,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -57,12 +59,18 @@ import com.example.presentation.viewmodel.OperationState
 import com.example.ui.theme.IncidentRedContainer
 import com.example.ui.theme.OnIncidentRedContainer
 import com.example.ui.theme.PositiveGreen
+import com.example.ui.theme.SchoolBluePrimary
 import com.example.ui.theme.VazirmatnFontFamily
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.Person
 import com.example.presentation.components.VoiceDictationTextField
+
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import com.example.domain.model.AcademicMonth
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -88,6 +96,9 @@ fun RegisterPositiveScreen(
     var notifyParent by remember { mutableStateOf(true) }
     var attachedImageBase64 by remember { mutableStateOf<String?>(null) }
     var showStudentPicker by remember { mutableStateOf(false) }
+
+    var selectedMonth by remember { mutableStateOf(AcademicMonth.getCurrentMonth()) }
+    var showMonthMenu by remember { mutableStateOf(false) }
 
     val currentStudent = effectiveStudents.firstOrNull { it.id == selectedStudentId }
 
@@ -256,6 +267,17 @@ fun RegisterPositiveScreen(
                         }
                     }
 
+                    val cameraLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+                        contract = androidx.activity.result.contract.ActivityResultContracts.TakePicturePreview()
+                    ) { bitmap: android.graphics.Bitmap? ->
+                        bitmap?.let {
+                            val stream = java.io.ByteArrayOutputStream()
+                            it.compress(android.graphics.Bitmap.CompressFormat.JPEG, 80, stream)
+                            val bytes = stream.toByteArray()
+                            attachedImageBase64 = "data:image/jpeg;base64," + android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+                        }
+                    }
+
                     if (attachedImageBase64 != null) {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
@@ -278,14 +300,81 @@ fun RegisterPositiveScreen(
                             }
                         }
                     } else {
-                        OutlinedButton(
-                            onClick = { imagePickerLauncher.launch("image/*") },
+                        Row(
                             modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp)
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Icon(Icons.Default.AddCircle, contentDescription = null)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("افزودن تصویر پیوست (اختیاری)", fontFamily = VazirmatnFontFamily)
+                            Button(
+                                onClick = { cameraLauncher.launch(null) },
+                                colors = ButtonDefaults.buttonColors(containerColor = SchoolBluePrimary),
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(Icons.Default.PhotoCamera, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("عکس با دوربین", fontFamily = VazirmatnFontFamily, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+
+                            OutlinedButton(
+                                onClick = { imagePickerLauncher.launch("image/*") },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("انتخاب از گالری", fontFamily = VazirmatnFontFamily, fontSize = 12.sp)
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Month Selector Field
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        OutlinedTextField(
+                            value = "ماه ${selectedMonth.persianName} (${selectedMonth.season})",
+                            onValueChange = {},
+                            readOnly = true,
+                            label = {
+                                Text(
+                                    text = "ماه ثبت در پرونده انضباطی",
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        fontFamily = VazirmatnFontFamily,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                )
+                            },
+                            trailingIcon = {
+                                IconButton(onClick = { showMonthMenu = true }) {
+                                    Icon(Icons.Default.ArrowDropDown, contentDescription = "انتخاب ماه")
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { showMonthMenu = true }
+                                .testTag("select_month_dropdown"),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+
+                        DropdownMenu(
+                            expanded = showMonthMenu,
+                            onDismissRequest = { showMonthMenu = false }
+                        ) {
+                            AcademicMonth.ACADEMIC_YEAR_ORDER.forEach { m ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            text = "ماه ${m.persianName} (${m.season})",
+                                            fontFamily = VazirmatnFontFamily,
+                                            fontWeight = if (m == selectedMonth) FontWeight.Bold else FontWeight.Normal
+                                        )
+                                    },
+                                    onClick = {
+                                        selectedMonth = m
+                                        showMonthMenu = false
+                                    }
+                                )
+                            }
                         }
                     }
 
@@ -298,7 +387,7 @@ fun RegisterPositiveScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "تاریخ: $currentDate - $currentTime",
+                            text = "تاریخ: $currentDate (${selectedMonth.persianName}) - $currentTime",
                             style = MaterialTheme.typography.bodySmall.copy(fontFamily = VazirmatnFontFamily),
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -386,6 +475,7 @@ fun RegisterPositiveScreen(
                                     category = "رفتار مثبت",
                                     title = "رفتار مثبت",
                                     description = finalText,
+                                    date = "$currentDate (${selectedMonth.persianName})",
                                     points = count,
                                     createdBy = currentUser?.name ?: "مدیر",
                                     createdByRole = currentUser?.role ?: UserRole.MANAGER,

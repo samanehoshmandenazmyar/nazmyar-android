@@ -42,9 +42,8 @@ enum class AcademicMonth(
             val month = calendar.get(Calendar.MONTH) + 1
             val day = calendar.get(Calendar.DAY_OF_MONTH)
 
-            // Convert Gregorian to Solar Hijri
-            val shamsiMonth = getShamsiMonthNumber(year, month, day)
-            return fromMonthNumber(shamsiMonth)
+            val shamsi = DateTimeUtils.gregorianToJalali(year, month, day)
+            return fromMonthNumber(shamsi[1])
         }
 
         fun fromDate(dateStr: String?, timestamp: Long = 0L): AcademicMonth {
@@ -55,19 +54,20 @@ enum class AcademicMonth(
                     .replace("۶", "6").replace("۷", "7").replace("۸", "8")
                     .replace("۹", "9").trim()
 
+                // Check by pattern YYYY/MM/DD or YYYY-MM-DD FIRST to follow exact برج
+                val regex = Regex("""(\d{4})[/-](\d{1,2})[/-](\d{1,2})""")
+                val match = regex.find(clean)
+                if (match != null) {
+                    val mNum = match.groupValues[2].toIntOrNull()
+                    if (mNum != null && mNum in 1..12) {
+                        return fromMonthNumber(mNum)
+                    }
+                }
+
                 // Check by Persian month name
                 for (m in entries) {
                     if (dateStr.contains(m.persianName)) {
                         return m
-                    }
-                }
-
-                // Check by pattern YYYY/MM/DD or YYYY-MM-DD
-                val parts = clean.split("/", "-", " ")
-                if (parts.size >= 2) {
-                    val mNum = parts[1].toIntOrNull()
-                    if (mNum != null && mNum in 1..12) {
-                        return fromMonthNumber(mNum)
                     }
                 }
             }
@@ -77,41 +77,11 @@ enum class AcademicMonth(
                 val y = cal.get(Calendar.YEAR)
                 val m = cal.get(Calendar.MONTH) + 1
                 val d = cal.get(Calendar.DAY_OF_MONTH)
-                val shamsiMonth = getShamsiMonthNumber(y, m, d)
-                return fromMonthNumber(shamsiMonth)
+                val shamsi = DateTimeUtils.gregorianToJalali(y, m, d)
+                return fromMonthNumber(shamsi[1])
             }
 
             return getCurrentMonth()
-        }
-
-        private fun getShamsiMonthNumber(gy: Int, gm: Int, gd: Int): Int {
-            val gDaysInMonth = intArrayOf(31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
-            val jDaysInMonth = intArrayOf(31, 31, 31, 31, 31, 31, 30, 30, 30, 30, 30, 29)
-
-            val gy2 = gy - 1600
-            val gm2 = gm - 1
-            val gd2 = gd - 1
-
-            var gDayNo = 365 * gy2 + (gy2 + 3) / 4 - (gy2 + 99) / 100 + (gy2 + 399) / 400
-
-            for (i in 0 until gm2) {
-                gDayNo += gDaysInMonth[i]
-            }
-            if (gm2 > 1 && ((gy2 % 4 == 0 && gy2 % 100 != 0) || (gy2 % 400 == 0))) {
-                gDayNo++
-            }
-            gDayNo += gd2
-
-            var jDayNo = gDayNo - 79
-            val jNp = jDayNo / 12053
-            jDayNo %= 12053
-
-            var jm = 0
-            while (jm < 11 && jDayNo >= jDaysInMonth[jm]) {
-                jDayNo -= jDaysInMonth[jm]
-                jm++
-            }
-            return jm + 1
         }
     }
 }

@@ -140,7 +140,7 @@ object DemoData {
         ),
         User(
             id = "user_teacher_mokhtar_alipoor",
-            name = "حاج مختار عالیپور",
+            name = "مختار عالیپور",
             phone = "+989177753618",
             email = "alipoor@school.ir",
             role = UserRole.TEACHER,
@@ -272,8 +272,8 @@ object DemoData {
             schoolId = DEFAULT_SCHOOL_ID,
             grade = "پایه هفتم",
             name = "کلاس 7/1",
-            teacherId = "teacher_01",
-            teacherName = "دبیر پایه هفتم",
+            teacherId = "user_teacher_hosein_rasekhiyan",
+            teacherName = "حسین راسخیان",
             studentCount = AllowedStudentsRegistry.grade7Class1.size
         ),
         SchoolClass(
@@ -281,8 +281,8 @@ object DemoData {
             schoolId = DEFAULT_SCHOOL_ID,
             grade = "پایه هفتم",
             name = "کلاس 7/2",
-            teacherId = "teacher_02",
-            teacherName = "دبیر پایه هفتم",
+            teacherId = "user_teacher_peyman_tobak",
+            teacherName = "پیمان توبک",
             studentCount = AllowedStudentsRegistry.grade7Class2.size
         ),
         SchoolClass(
@@ -290,8 +290,8 @@ object DemoData {
             schoolId = DEFAULT_SCHOOL_ID,
             grade = "پایه هشتم",
             name = "کلاس 8/1",
-            teacherId = "teacher_03",
-            teacherName = "دبیر پایه هشتم",
+            teacherId = "user_teacher_abdollah_akbarifard",
+            teacherName = "عبدالله اکبری فرد",
             studentCount = AllowedStudentsRegistry.grade8Class1.size
         ),
         SchoolClass(
@@ -299,8 +299,8 @@ object DemoData {
             schoolId = DEFAULT_SCHOOL_ID,
             grade = "پایه هشتم",
             name = "کلاس 8/2",
-            teacherId = "teacher_04",
-            teacherName = "دبیر پایه هشتم",
+            teacherId = "user_teacher_hosein_jatoot",
+            teacherName = "حسین جاتوت",
             studentCount = AllowedStudentsRegistry.grade8Class2.size
         ),
         SchoolClass(
@@ -308,8 +308,8 @@ object DemoData {
             schoolId = DEFAULT_SCHOOL_ID,
             grade = "پایه نهم",
             name = "کلاس 9/1",
-            teacherId = "teacher_05",
-            teacherName = "دبیر پایه نهم",
+            teacherId = "user_teacher_gholamreza_khayat",
+            teacherName = "غلامرضا خیاط",
             studentCount = AllowedStudentsRegistry.grade9Class1.size
         ),
         SchoolClass(
@@ -317,8 +317,8 @@ object DemoData {
             schoolId = DEFAULT_SCHOOL_ID,
             grade = "پایه نهم",
             name = "کلاس 9/2",
-            teacherId = "teacher_06",
-            teacherName = "دبیر پایه نهم",
+            teacherId = "user_teacher_mokhtar_alipoor",
+            teacherName = "مختار عالیپور",
             studentCount = AllowedStudentsRegistry.grade9Class2.size
         )
     )
